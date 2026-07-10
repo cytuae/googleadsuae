@@ -371,22 +371,22 @@
 .product-showcase {
   display: grid;
   gap: 1.15rem;
-  max-width: 28rem;
+  max-width: 16rem;
   margin-inline: auto;
   justify-items: center;
 }
 
 @media (min-width: 768px) {
   .product-showcase {
-    max-width: 36rem;
+    max-width: 18rem;
   }
 }
 
 .product-showcase__frame {
   position: relative;
   width: 100%;
-  padding: 0.85rem;
-  background: var(--surface-1);
+  padding: 0.85rem 0.75rem 2.25rem;
+  background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface-1) 100%);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-soft);
@@ -394,20 +394,22 @@
 
 .product-showcase__frame img {
   width: 100%;
-  border-radius: var(--radius-md);
-  background: #fff;
+  max-width: 14rem;
+  margin-inline: auto;
+  border-radius: 0;
+  background: transparent;
 }
 
 .product-showcase__badge {
   position: absolute;
   left: 50%;
-  bottom: 1rem;
+  bottom: 0.75rem;
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.9rem;
-  font-size: 14px;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 12px;
   font-weight: 700;
   color: #1a0f14;
   background: var(--accent);
