@@ -1,0 +1,83 @@
+:root {
+  /* Canvas — warm dark, soft & calming for women */
+  --canvas: #0c090b;
+  --surface-1: #141014;
+  --surface-2: #1a1518;
+  --surface-3: #221c20;
+  --hairline: #3a3036;
+  --hairline-soft: #2a2228;
+
+  /* Text — white for mobile readability */
+  --text-primary: #ffffff;
+  --text-secondary: #ffffff;
+  --text-muted: #e8dce1;
+
+  /* Accent — soft blush rose (trust + comfort) */
+  --accent: #e8a0b5;
+  --accent-hover: #d989a3;
+  --accent-deep: #c46b88;
+  --accent-soft: rgba(232, 160, 181, 0.14);
+  --accent-glow: rgba(232, 160, 181, 0.22);
+  --accent-border: rgba(232, 160, 181, 0.32);
+
+  /* WhatsApp — slightly softer green */
+  --wa: #2dd46f;
+  --wa-hover: #25c063;
+  --wa-soft: rgba(45, 212, 111, 0.14);
+
+  /* Semantic */
+  --focus: #e8a0b5;
+  --success: #7dcea0;
+  --warning: #e8c07d;
+
+  /* Typography */
+  --font-display: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --font-body: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+
+  /* Spacing (4px base) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 5rem;
+  --space-10: 6rem;
+  --space-11: 8rem;
+
+  /* Radius — softer, more welcoming */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Layout */
+  --max-width: 70rem;
+  --gutter: 1rem;
+  --header-h: 4rem;
+  --sticky-cta-h: 4.5rem;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+
+  /* Shadows */
+  --shadow-soft: 0 0 90px var(--accent-glow);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --gutter: 2rem;
+    --header-h: 4.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --gutter: 3rem;
+  }
+}
