@@ -1,10 +1,83 @@
 (function () {
   "use strict";
 
-  var yearEl = document.getElementById("year");
-  if (yearEl) {
-    yearEl.textContent = String(new Date().getFullYear());
+  /* ===== SITE CONFIG — عدّلي هذه القيم قبل النشر ===== */
+  var SITE = window.SITE_CONFIG || {
+    whatsapp: "971547952044",
+    domain: "https://example.com",
+    city: "المملكة العربية السعودية",
+    hours: "الرد خلال ساعات العمل",
+    licenseNote: "الترخيص الرسمي متاح عند الطلب عبر واتساب",
+    waDefaultText: "مرحبا دكتورة عهود، أرغب باستشارة مجانية"
+  };
+
+  function waUrl(text) {
+    var msg = encodeURIComponent(text || SITE.waDefaultText);
+    return "https://wa.me/" + SITE.whatsapp + "?text=" + msg;
   }
+
+  function trackWhatsApp(source) {
+    try {
+      if (typeof gtag === "function") {
+        gtag("event", "whatsapp_click", {
+          event_category: "conversion",
+          event_label: source || "whatsapp"
+        });
+      }
+      if (typeof fbq === "function") {
+        fbq("trackCustom", "WhatsAppClick", { source: source || "whatsapp" });
+      }
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({
+        event: "whatsapp_click",
+        cta_source: source || "whatsapp"
+      });
+    } catch (e) {}
+  }
+
+  // Apply domain to canonical / OG if still placeholder-relative
+  var canonical = document.querySelector('link[rel="canonical"]');
+  if (canonical && SITE.domain) {
+    canonical.setAttribute("href", SITE.domain.replace(/\/$/, "") + "/");
+  }
+  var ogUrl = document.querySelector('meta[property="og:url"]');
+  if (ogUrl && SITE.domain) {
+    ogUrl.setAttribute("content", SITE.domain.replace(/\/$/, "") + "/");
+  }
+  var ogImage = document.querySelector('meta[property="og:image"]');
+  if (ogImage && SITE.domain) {
+    var imgPath = ogImage.getAttribute("content") || "";
+    if (imgPath && imgPath.indexOf("http") !== 0) {
+      ogImage.setAttribute(
+        "content",
+        SITE.domain.replace(/\/$/, "") + "/" + imgPath.replace(/^\//, "")
+      );
+    }
+  }
+
+  // Wire all WhatsApp CTAs from one config
+  document.querySelectorAll("[data-cta='whatsapp']").forEach(function (el) {
+    var custom = el.getAttribute("data-wa-text");
+    el.setAttribute("href", waUrl(custom || SITE.waDefaultText));
+    el.setAttribute("target", "_blank");
+    el.setAttribute("rel", "noopener noreferrer");
+    el.addEventListener("click", function () {
+      trackWhatsApp(el.getAttribute("data-cta-source") || "whatsapp");
+    });
+  });
+
+  // Footer dynamic bits
+  var yearEl = document.getElementById("year");
+  if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+
+  var cityEl = document.querySelector("[data-site-city]");
+  if (cityEl && SITE.city) cityEl.textContent = SITE.city;
+
+  var hoursEl = document.querySelector("[data-site-hours]");
+  if (hoursEl && SITE.hours) hoursEl.textContent = SITE.hours;
+
+  var licenseEl = document.querySelector("[data-site-license]");
+  if (licenseEl && SITE.licenseNote) licenseEl.textContent = SITE.licenseNote;
 
   var header = document.querySelector("[data-header]");
   if (header) {

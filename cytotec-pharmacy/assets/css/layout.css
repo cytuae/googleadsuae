@@ -56,7 +56,7 @@
 .section__lead {
   font-size: 17px;
   line-height: 1.65;
-  color: #ffffff;
+  color: var(--text-secondary);
   text-align: center;
 }
 

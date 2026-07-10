@@ -7,10 +7,10 @@
   --hairline: #3a3036;
   --hairline-soft: #2a2228;
 
-  /* Text — white for mobile readability */
+  /* Text — white headlines, soft secondary for hierarchy */
   --text-primary: #ffffff;
-  --text-secondary: #ffffff;
-  --text-muted: #e8dce1;
+  --text-secondary: #e8dce1;
+  --text-muted: #c4b0b8;
 
   /* Accent — soft blush rose (trust + comfort) */
   --accent: #e8a0b5;

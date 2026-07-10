@@ -95,21 +95,27 @@ h3 {
 }
 
 p {
-  color: #ffffff;
+  color: var(--text-secondary);
   font-size: 17px;
 }
 
 @media (min-width: 900px) {
   h1,
-  h2,
-  h3 {
+  .hero__title {
     text-align: start;
   }
 
-  .section__header h2,
-  .final-cta__box h2,
+  h2,
+  h3 {
+    text-align: center;
+  }
+
+  .pas-card h3,
+  .process-step h3,
+  .benefit-card h3,
   .trust-card h3,
-  .doctor-card h3 {
+  .section__title,
+  .final-cta__box h2 {
     text-align: center;
   }
 }

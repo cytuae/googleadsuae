@@ -49,6 +49,23 @@
   background: var(--surface-2);
 }
 
+.btn--text {
+  min-height: auto;
+  padding: 0.35rem 0.25rem;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  white-space: normal;
+}
+
+.btn--text:hover {
+  color: var(--accent);
+}
+
 .btn--block {
   width: 100%;
 }
@@ -207,7 +224,7 @@
   margin-bottom: 1.25rem;
   font-size: 17px;
   line-height: 1.65;
-  color: #ffffff;
+  color: var(--text-secondary);
   text-align: center;
 }
 
@@ -220,14 +237,14 @@
 .hero__actions {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   gap: 0.625rem;
   margin-bottom: 1.15rem;
 }
 
 @media (min-width: 480px) {
   .hero__actions {
-    flex-direction: row;
+    flex-direction: column;
     flex-wrap: wrap;
     justify-content: center;
   }
@@ -241,7 +258,7 @@
   .hero__title {
     text-align: start;
     margin-inline: 0;
-    max-width: 18ch;
+    max-width: 22ch;
   }
 
   .hero__lead {
@@ -250,11 +267,16 @@
   }
 
   .hero__actions {
+    align-items: flex-start;
     justify-content: flex-start;
   }
 
   .trust-row {
     justify-content: flex-start;
+  }
+
+  .hero__proof {
+    text-align: start;
   }
 }
 
@@ -270,7 +292,7 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 15px;
-  color: #ffffff;
+  color: var(--text-secondary);
 }
 
 .trust-row__item svg {
@@ -278,6 +300,14 @@
   height: 1.1rem;
   color: var(--accent);
   flex-shrink: 0;
+}
+
+.hero__proof {
+  margin-top: 0.85rem;
+  font-size: 14px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.5;
 }
 
 .hero__visual {
@@ -359,7 +389,7 @@
 .rx-notice p {
   font-size: 17px;
   line-height: 1.55;
-  color: #ffffff;
+  color: var(--text-secondary);
 }
 
 .rx-notice strong {
@@ -433,11 +463,27 @@
 .product-showcase__points li {
   text-align: center;
   font-size: 17px;
-  color: #ffffff;
+  color: var(--text-secondary);
   padding: 0.7rem 0.85rem;
   background: var(--surface-1);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
+}
+
+.footer__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 1rem;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.footer__privacy {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 36rem;
+  line-height: 1.55;
 }
 
 /* Doctor trust card (no fake AI photos) */
@@ -474,7 +520,7 @@
 
 .doctor-card__meta li {
   font-size: 15px;
-  color: #ffffff;
+  color: var(--text-secondary);
   padding: 0.5rem 0.65rem;
   background: var(--surface-2);
   border: 1px solid var(--hairline-soft);
@@ -551,7 +597,7 @@
   gap: 0.65rem;
   align-items: flex-start;
   justify-content: center;
-  color: #ffffff;
+  color: var(--text-secondary);
   font-size: 17px;
   line-height: 1.5;
   text-align: start;
@@ -650,7 +696,7 @@
 .benefit-card p {
   font-size: 17px;
   line-height: 1.55;
-  color: #ffffff;
+  color: var(--text-secondary);
 }
 
 /* ========== Process ========== */
@@ -703,7 +749,7 @@
 .process-step p {
   font-size: 17px;
   line-height: 1.55;
-  color: #ffffff;
+  color: var(--text-secondary);
 }
 
 .process__cta {
@@ -758,7 +804,7 @@
 .trust-card p {
   font-size: 17px;
   line-height: 1.55;
-  color: #ffffff;
+  color: var(--text-secondary);
 }
 
 .disclaimer {
@@ -768,7 +814,7 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   font-size: 15px;
-  color: #ffffff;
+  color: var(--text-muted);
   text-align: center;
   max-width: 48rem;
   margin-inline: auto;
@@ -798,7 +844,7 @@
   gap: 0.75rem;
   width: 100%;
   padding: 0.9rem 1rem;
-  text-align: center;
+  text-align: start;
   font-weight: 600;
   font-size: 17px;
   color: #ffffff;
@@ -848,8 +894,8 @@
   padding: 0 1rem 1rem;
   font-size: 17px;
   line-height: 1.55;
-  color: #ffffff;
-  text-align: center;
+  color: var(--text-secondary);
+  text-align: start;
 }
 
 /* ========== Final CTA ========== */
@@ -890,14 +936,14 @@
   margin-bottom: 1.15rem;
   font-size: 17px;
   line-height: 1.6;
-  color: #ffffff;
+  color: var(--text-secondary);
   text-align: center;
 }
 
 .final-cta__note {
   margin-top: 0.75rem;
   font-size: 15px;
-  color: #ffffff;
+  color: var(--text-muted);
   text-align: center;
 }
 
