@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 
 /**
- * Simple Forbidden HTML page for blocked visitors.
+ * Simple Access Denied page for blocked visitors.
  * @returns {string}
  */
 export function forbiddenPageHtml() {
@@ -17,7 +17,7 @@ export function forbiddenPageHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>403 Forbidden</title>
+  <title>Access Denied</title>
   <style>
     :root { color-scheme: dark; }
     body {
@@ -47,21 +47,22 @@ export function forbiddenPageHtml() {
 </head>
 <body>
   <main>
-    <h1>403 Forbidden</h1>
-    <p>Access to this resource is not allowed.</p>
+    <h1>Access Denied</h1>
+    <p>You do not have permission to access this resource.</p>
   </main>
 </body>
 </html>`;
 }
 
 /**
- * Build a 403 Forbidden response for a security block.
+ * Build a 403 Access Denied response for a security block.
  *
  * @param {{
  *   requestId: string,
  *   engineVersion: string,
  *   blockType?: string,
- *   country?: string|null
+ *   country?: string|null,
+ *   reason?: string|null
  * }} options
  * @returns {import('next/server').NextResponse}
  */
@@ -72,11 +73,14 @@ export function createForbiddenResponse(options) {
     "x-security-engine": options.engineVersion,
     "x-security-decision": "block",
     "x-request-id": options.requestId,
-    "x-security-block": options.blockType || "country"
+    "x-security-block": options.blockType || "denied"
   };
 
   if (options.country) {
     headers["x-security-country"] = String(options.country);
+  }
+  if (options.reason) {
+    headers["x-security-reason"] = String(options.reason);
   }
 
   return new NextResponse(forbiddenPageHtml(), {

@@ -1,4 +1,4 @@
-export { getSecurityConfig, isEnforcementEnabled, isDevelopment } from "./config";
+export { getSecurityConfig, isEnforcementEnabled, isDevelopment, HOSTING_PROVIDER_KEYWORDS } from "./config";
 export {
   checkIP,
   getIPInfo,
@@ -7,7 +7,7 @@ export {
   isLookupableIP
 } from "./ipinfo";
 export { checkFingerprint } from "./fingerprint";
-export { applyRules, normalizeCountryCode } from "./rules";
+export { applyRules, normalizeCountryCode, matchHostingProvider } from "./rules";
 export { logVisit } from "./logger";
 export { createForbiddenResponse, forbiddenPageHtml } from "./responses";
 export { isGoogleAdsOrSearchBot } from "./bots";

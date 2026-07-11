@@ -1,7 +1,7 @@
 /**
- * Security visit logger
- * ---------------------
- * Structured events for Vercel Edge / production logs.
+ * Security visit logger — Strict Security Gate v1
+ * -----------------------------------------------
+ * Never logs secrets (IPINFO_TOKEN).
  */
 
 /**
@@ -22,21 +22,30 @@ export async function logVisit(payload, context = {}) {
 
   if (rules.decision === "block") {
     console.log("[security:block]", {
-      reason: rules.reason || "blocked",
+      ip: payload.ip || info.ip || null,
       country: rules.country || info.country || null,
-      requestId: payload.requestId,
-      ip: payload.ip,
-      path: payload.path,
-      matchedRules: rules.matchedRules || []
+      asn: info.asn || null,
+      company: info.company || null,
+      vpn: info.is_vpn === true,
+      proxy: info.is_proxy === true,
+      tor: info.is_tor === true,
+      relay: info.is_relay === true,
+      hosting: info.is_hosting === true,
+      blockReason: rules.reason || "blocked",
+      matchedProvider: rules.matchedProvider || null,
+      timestamp: payload.timestamp || new Date().toISOString(),
+      requestId: payload.requestId || null,
+      path: payload.path || null
     });
     return;
   }
 
   if (rules.reason === "google_bot_bypass") {
     console.log("[security:google-bot]", {
-      requestId: payload.requestId,
-      path: payload.path,
-      country: rules.country || null
+      ip: payload.ip || null,
+      path: payload.path || null,
+      timestamp: payload.timestamp || new Date().toISOString(),
+      requestId: payload.requestId || null
     });
   }
 }

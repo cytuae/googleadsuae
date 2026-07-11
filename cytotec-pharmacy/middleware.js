@@ -1,13 +1,10 @@
 /**
- * Edge security middleware — Phase 1
- * ----------------------------------
- * - Google Ads/Search bots: always allow (no IPinfo, no geo block)
- * - Known proxies: always block (even AE/MA)
- * - Country allowlist: AE, MA
- * - Country blocklist: JO, EG, SY, YE, SD, PK
- * - Any failure: fail-open (serve the page)
+ * Edge security middleware — Strict Security Gate v1
+ * --------------------------------------------------
+ * Inspect HTML/document visitors via IPinfo, enforce anonymity/hosting
+ * blocks, keep geo allowlist, fail-open on errors, never expose token.
  *
- * Matcher limited to HTML entry points to keep assets fast and cheap.
+ * Static assets and Next internals are excluded from the matcher.
  */
 
 import { NextResponse } from "next/server";
@@ -19,19 +16,23 @@ import { createForbiddenResponse } from "./security/responses";
 import { isGoogleAdsOrSearchBot } from "./security/bots";
 
 export const config = {
-  matcher: ["/", "/index.html"]
+  matcher: [
+    "/",
+    "/index.html",
+    "/((?!_next(?:/|$)|assets(?:/|$)|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|.*\\.(?:ico|png|jpe?g|gif|webp|svg|avif|css|js|mjs|map|woff2?|ttf|eot|txt)$).*)"
+  ]
 };
 
 /**
  * @param {import('next/server').NextRequest} request
- * @param {{ requestId?: string, reason?: string }} [meta]
+ * @param {{ requestId?: string, reason?: string, engineVersion?: string }} [meta]
  * @returns {import('next/server').NextResponse}
  */
 function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
   /** @type {Record<string, string>} */
   const headers = {
-    "x-security-engine": meta.engineVersion || "1.4.0-block-proxy",
+    "x-security-engine": meta.engineVersion || "1.5.0-strict-gate-v1",
     "x-security-decision": "allow"
   };
   if (meta.requestId) headers["x-request-id"] = meta.requestId;
@@ -69,9 +70,7 @@ export async function middleware(request) {
   const requestId = createRequestId();
 
   try {
-    // ------------------------------------------------------------------
-    // ALWAYS allow Google Ads / Search crawlers — before any geo lookup
-    // ------------------------------------------------------------------
+    // Google Ads / Search crawlers — never block (Quality Score / Ads bots)
     if (isGoogleAdsOrSearchBot(request)) {
       try {
         await logVisit(
@@ -145,8 +144,9 @@ export async function middleware(request) {
       return createForbiddenResponse({
         requestId,
         engineVersion: securityConfig.version,
-        blockType: rulesResult.blockType || "country",
-        country: rulesResult.country
+        blockType: rulesResult.blockType || "denied",
+        country: rulesResult.country,
+        reason: rulesResult.reason
       });
     }
 
@@ -156,11 +156,15 @@ export async function middleware(request) {
       engineVersion: securityConfig.version
     });
   } catch (error) {
-    // Fail-open: never take the site down with MIDDLEWARE_INVOCATION_FAILED
+    // Fail-open: never return 500 / MIDDLEWARE_INVOCATION_FAILED
     console.error("[security:error]", {
       requestId,
       message: error && error.message ? error.message : String(error)
     });
-    return serveLanding(request, { requestId, reason: "fail_open" });
+    return serveLanding(request, {
+      requestId,
+      reason: "fail_open",
+      engineVersion: "1.5.0-strict-gate-v1"
+    });
   }
 }

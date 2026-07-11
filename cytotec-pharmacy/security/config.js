@@ -1,11 +1,34 @@
 /**
- * Security configuration
- * ----------------------
- * Phase 1: country allow/block + Google bot bypass.
- * Secrets stay in env (IPINFO_TOKEN on Vercel).
+ * Security configuration — Strict Security Gate v1
+ * ------------------------------------------------
+ * Secrets stay in env (IPINFO_TOKEN on Vercel). Never log or return the token.
  */
 
 /** @typedef {'off' | 'monitor' | 'enforce'} SecurityMode */
+
+/**
+ * Datacenter / cloud ASN–company keywords (case-insensitive substring match).
+ */
+export const HOSTING_PROVIDER_KEYWORDS = [
+  "Amazon",
+  "AWS",
+  "Google Cloud",
+  "Google LLC",
+  "Microsoft Azure",
+  "Azure",
+  "Oracle Cloud",
+  "Oracle",
+  "DigitalOcean",
+  "Hetzner",
+  "OVH",
+  "Linode",
+  "Vultr",
+  "Alibaba Cloud",
+  "Tencent Cloud",
+  "Cloudflare",
+  "Fastly",
+  "Akamai"
+];
 
 /**
  * @returns {{
@@ -27,7 +50,10 @@
  *     blockVpn: boolean,
  *     blockProxy: boolean,
  *     blockRelay: boolean,
- *     blockHosting: boolean
+ *     blockTor: boolean,
+ *     blockHosting: boolean,
+ *     blockHostingProviders: boolean,
+ *     hostingProviderKeywords: string[]
  *   },
  *   version: string
  * }}
@@ -49,21 +75,21 @@ export function getSecurityConfig() {
     },
 
     rules: {
-      // Audience: UAE + Morocco
       allowedCountries: ["AE", "MA"],
-      // Click-fraud sources (phase 1)
       blockedCountries: ["JO", "EG", "SY", "YE", "SD", "PK"],
-      // If IPinfo has no country → allow (fail-open)
       blockUnknownCountry: false,
-      // Strict: block known proxies even from AE/MA
+
+      // Strict Security Gate v1
+      blockVpn: true,
       blockProxy: true,
-      // Still off — enable later if needed
-      blockVpn: false,
-      blockRelay: false,
-      blockHosting: false
+      blockRelay: true,
+      blockTor: true,
+      blockHosting: true,
+      blockHostingProviders: true,
+      hostingProviderKeywords: HOSTING_PROVIDER_KEYWORDS
     },
 
-    version: "1.4.0-block-proxy"
+    version: "1.5.0-strict-gate-v1"
   };
 }
 
