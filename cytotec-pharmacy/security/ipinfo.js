@@ -269,17 +269,18 @@ function emptyInfo(ip) {
 }
 
 /**
- * @param {string} url
+ * @param {string} pathWithIp — e.g. `/1.2.3.4/privacy`
  * @param {string} token
  * @param {AbortSignal} signal
  * @param {typeof fetch} fetchImpl
  */
-async function fetchJson(url, token, signal, fetchImpl) {
+async function fetchJson(pathWithIp, token, signal, fetchImpl) {
+  // Classic IPinfo endpoints expect token as query param (never log this URL).
+  const url = `${IPINFO_BASE}${pathWithIp}?token=${encodeURIComponent(token)}`;
   const response = await fetchImpl(url, {
     method: "GET",
     headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`
+      Accept: "application/json"
     },
     signal
   });
@@ -346,18 +347,8 @@ export async function getIPInfo(ip, options = {}) {
 
   try {
     const [privacyResult, coreResult] = await Promise.all([
-      fetchJson(
-        `${IPINFO_BASE}/${encoded}/privacy`,
-        token,
-        controller.signal,
-        fetchImpl
-      ),
-      fetchJson(
-        `${IPINFO_BASE}/${encoded}/json`,
-        token,
-        controller.signal,
-        fetchImpl
-      )
+      fetchJson(`/${encoded}/privacy`, token, controller.signal, fetchImpl),
+      fetchJson(`/${encoded}/json`, token, controller.signal, fetchImpl)
     ]);
 
     // Privacy Detection is required for enforcement signals
