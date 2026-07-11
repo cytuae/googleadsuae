@@ -5,9 +5,10 @@
  * without changing middleware or rules logic.
  *
  * Where to add future entries:
- *   - IPs       → security/ip-blacklist.json       → "ips" array
- *   - Providers → security/provider-blacklist.json → "providers" array
- *   - ASNs      → security/asn-blacklist.json      → "asns" array
+ *   - IPs           → security/ip-blacklist.json           → "ips" array
+ *   - Providers     → security/provider-blacklist.json     → "providers" array
+ *   - ASNs          → security/asn-blacklist.json          → "asns" array
+ *   - Fingerprints  → security/fingerprint-blacklist.json  → JSON array of visitorId strings
  *
  * After editing, redeploy. No code changes required.
  */
@@ -15,6 +16,7 @@
 import ipBlacklistData from "./ip-blacklist.json";
 import providerBlacklistData from "./provider-blacklist.json";
 import asnBlacklistData from "./asn-blacklist.json";
+import fingerprintBlacklistData from "./fingerprint-blacklist.json";
 
 /**
  * @param {unknown} data
@@ -55,6 +57,24 @@ export function loadAsnBlacklist() {
   return readStringList(asnBlacklistData, "asns");
 }
 
+/**
+ * Fingerprint blacklist is a raw JSON array of FingerprintJS visitorId strings.
+ * Add future visitorIds directly to security/fingerprint-blacklist.json.
+ * @returns {string[]}
+ */
+export function loadFingerprintBlacklist() {
+  try {
+    if (Array.isArray(fingerprintBlacklistData)) {
+      return fingerprintBlacklistData
+        .map((entry) => String(entry || "").trim())
+        .filter(Boolean);
+    }
+    return readStringList(fingerprintBlacklistData, "visitorIds");
+  } catch {
+    return [];
+  }
+}
+
 /** @type {ReadonlySet<string>} */
 const IP_SET = new Set(loadIpBlacklist());
 
@@ -65,6 +85,9 @@ const PROVIDER_LIST = Object.freeze(loadProviderBlacklist());
 const ASN_SET = new Set(
   loadAsnBlacklist().map((asn) => normalizeAsn(asn)).filter(Boolean)
 );
+
+/** @type {ReadonlySet<string>} */
+const FINGERPRINT_SET = new Set(loadFingerprintBlacklist());
 
 /**
  * Normalize ASN to digits-only string for comparison (AS13335 → 13335).
@@ -123,4 +146,14 @@ export function isAsnBlacklisted(asn) {
   const normalized = normalizeAsn(asn);
   if (!normalized) return false;
   return ASN_SET.has(normalized);
+}
+
+/**
+ * Exact match against FingerprintJS visitorId blacklist.
+ * @param {string|null|undefined} visitorId
+ * @returns {boolean}
+ */
+export function isFingerprintBlacklisted(visitorId) {
+  if (!visitorId || typeof visitorId !== "string") return false;
+  return FINGERPRINT_SET.has(visitorId.trim());
 }

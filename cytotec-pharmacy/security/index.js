@@ -12,7 +12,7 @@ export {
   normalizeIPInfo,
   isLookupableIP
 } from "./ipinfo";
-export { checkFingerprint } from "./fingerprint";
+export { checkFingerprint, evaluateFingerprintCookies, isFingerprintBlacklisted } from "./fingerprint";
 export { applyRules, normalizeCountryCode, matchHostingProvider } from "./rules";
 export { logVisit } from "./logger";
 export { createForbiddenResponse, forbiddenPageHtml } from "./responses";

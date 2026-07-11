@@ -1,42 +1,72 @@
 /**
- * Device / browser fingerprint provider (scaffold)
- * ------------------------------------------------
- * Future: correlate stable visitor signals (headers, client hints, tokens).
- * Edge middleware cannot run browser JS — fingerprinting will typically
- * combine edge signals now + client-side token later.
+ * Device Fingerprint Security Layer v1
+ * ------------------------------------
+ * Cookie / blacklist helpers for Edge middleware.
+ * Client-side FingerprintJS runs in public/assets/js/fingerprint-security.js
+ * and POSTs to /api/security/fingerprint.
+ *
+ * Add blocked visitorIds to: security/fingerprint-blacklist.json
+ * (JSON array of exact FingerprintJS visitorId strings).
  */
 
-/**
- * @typedef {Object} FingerprintCheckResult
- * @property {boolean} ok
- * @property {boolean} allow - Always true until enforcement is enabled
- * @property {string} [fingerprintId]
- * @property {Object} [signals]
- * @property {string} [reason]
- */
+import { isFingerprintBlacklisted } from "./blacklists";
+
+export { isFingerprintBlacklisted, loadFingerprintBlacklist } from "./blacklists";
+
+export const FINGERPRINT_COOKIE = "device_fingerprint";
+export const SECURITY_BLOCKED_COOKIE = "security_blocked";
 
 /**
- * Evaluate fingerprint-related signals. Currently a no-op pass-through.
+ * @param {import('next/server').NextRequest} request
+ * @returns {{ blocked: boolean, reason: string|null, visitorId: string|null }}
+ */
+export function evaluateFingerprintCookies(request) {
+  try {
+    const securityBlocked =
+      request.cookies.get(SECURITY_BLOCKED_COOKIE)?.value || "";
+    const visitorId =
+      (request.cookies.get(FINGERPRINT_COOKIE)?.value || "").trim() || null;
+
+    if (securityBlocked === "1") {
+      return {
+        blocked: true,
+        reason: "device_fingerprint_blacklist",
+        visitorId
+      };
+    }
+
+    if (visitorId && isFingerprintBlacklisted(visitorId)) {
+      return {
+        blocked: true,
+        reason: "device_fingerprint_blacklist",
+        visitorId
+      };
+    }
+
+    return { blocked: false, reason: null, visitorId };
+  } catch {
+    // Fail-open: never break the gate on cookie/parse errors
+    return { blocked: false, reason: null, visitorId: null };
+  }
+}
+
+/**
+ * Legacy scaffold — Edge cannot run FingerprintJS; cookies are the signal.
  *
  * @param {Request} request
  * @param {{ config?: Object, ipResult?: Object }} [context]
- * @returns {Promise<FingerprintCheckResult>}
+ * @returns {Promise<{ ok: boolean, allow: boolean, fingerprintId: string|null, reason: string }>}
  */
 export async function checkFingerprint(request, context = {}) {
   void context;
+  const result = evaluateFingerprintCookies(
+    /** @type {import('next/server').NextRequest} */ (request)
+  );
 
-  const signals = {
-    userAgent: request.headers.get("user-agent") || "",
-    acceptLanguage: request.headers.get("accept-language") || "",
-    secChUa: request.headers.get("sec-ch-ua") || ""
-  };
-
-  // STAGE: fingerprint — placeholder only (no blocking, no persistence)
   return {
     ok: true,
-    allow: true,
-    fingerprintId: null,
-    signals,
-    reason: "fingerprint_not_implemented"
+    allow: !result.blocked,
+    fingerprintId: result.visitorId,
+    reason: result.reason || "fingerprint_cookie_ok"
   };
 }

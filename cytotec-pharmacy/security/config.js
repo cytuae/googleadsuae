@@ -7,6 +7,7 @@
  *   - security/ip-blacklist.json
  *   - security/provider-blacklist.json
  *   - security/asn-blacklist.json
+ *   - security/fingerprint-blacklist.json  (FingerprintJS visitorId strings)
  */
 
 import { BLOCKED_IPS } from "./blocklist";
@@ -45,7 +46,7 @@ export function getSecurityConfig() {
 
     providers: {
       ipinfo: true,
-      fingerprint: false,
+      fingerprint: true,
       rules: true,
       logger: true
     },
@@ -70,7 +71,7 @@ export function getSecurityConfig() {
       hostingProviderKeywords: HOSTING_PROVIDER_KEYWORDS
     },
 
-    version: "2.0.0"
+    version: "2.1.0"
   };
 }
 

@@ -1,16 +1,19 @@
 /**
- * Edge security middleware — Security Layer v2 (dr-ohood.clinic)
- * -------------------------------------------------------------
+ * Edge security middleware — Security Layer v2 + Device Fingerprint v1
+ * -------------------------------------------------------------------
  * Check order:
- *   1. IP blacklist → 403
- *   2. Provider/company blacklist → 403
- *   3. ASN blacklist → 403
- *   4. vpn | proxy | tor | relay | hosting
+ *   0. Bypass fingerprint API + /access-denied (no redirect loops)
+ *   1. security_blocked cookie / device_fingerprint blacklist → 403
+ *   2. IP blacklist → 403
+ *   3. Provider/company blacklist → 403
+ *   4. ASN blacklist → 403
+ *   5. vpn | proxy | tor | relay | hosting
  *
- * Blacklists load from JSON (edit without changing this file):
+ * Blacklists (edit JSON, redeploy — no middleware logic changes):
  *   security/ip-blacklist.json
  *   security/provider-blacklist.json
  *   security/asn-blacklist.json
+ *   security/fingerprint-blacklist.json
  *
  * Fail-open on errors. Never 500. Never expose secrets.
  *
@@ -24,6 +27,7 @@ import { applyRules } from "./security/rules";
 import { logVisit } from "./security/logger";
 import { createForbiddenResponse } from "./security/responses";
 import { isTrustedSecurityBypassBot } from "./security/bots";
+import { evaluateFingerprintCookies } from "./security/fingerprint";
 
 export const config = {
   matcher: [
@@ -35,6 +39,20 @@ export const config = {
 
 /**
  * @param {import('next/server').NextRequest} request
+ * @returns {boolean}
+ */
+function isFingerprintBypassPath(request) {
+  const path = request.nextUrl.pathname || "";
+  return (
+    path === "/api/security/fingerprint" ||
+    path.startsWith("/api/security/fingerprint/") ||
+    path === "/access-denied" ||
+    path === "/access-denied.html"
+  );
+}
+
+/**
+ * @param {import('next/server').NextRequest} request
  * @param {{ requestId?: string, reason?: string, engineVersion?: string }} [meta]
  * @returns {import('next/server').NextResponse}
  */
@@ -42,7 +60,7 @@ function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
   /** @type {Record<string, string>} */
   const headers = {
-    "x-security-engine": meta.engineVersion || "2.0.0",
+    "x-security-engine": meta.engineVersion || "2.1.0",
     "x-security-decision": "allow"
   };
   if (meta.requestId) headers["x-request-id"] = meta.requestId;
@@ -80,6 +98,11 @@ export async function middleware(request) {
   const requestId = createRequestId();
 
   try {
+    // Fingerprint API + access-denied — never redirect-loop / never HTML-block the API
+    if (isFingerprintBypassPath(request)) {
+      return NextResponse.next();
+    }
+
     // Google Ads / Statcounter verifiers — never block
     if (isTrustedSecurityBypassBot(request)) {
       try {
@@ -119,6 +142,44 @@ export async function middleware(request) {
         reason: "security_off",
         engineVersion: securityConfig.version
       });
+    }
+
+    // Device Fingerprint Security Layer v1 — cookie gate (before IPinfo)
+    if (securityConfig.providers.fingerprint !== false) {
+      const fpGate = evaluateFingerprintCookies(request);
+      if (fpGate.blocked && isEnforcementEnabled(securityConfig)) {
+        try {
+          await logVisit(
+            {
+              timestamp: new Date().toISOString(),
+              method: request.method,
+              path: request.nextUrl.pathname,
+              ip: extractClientIP(request),
+              requestId,
+              rulesResult: {
+                decision: "block",
+                allow: false,
+                matchedRules: ["device_fingerprint_blacklist"],
+                reason: "device_fingerprint_blacklist",
+                country: null,
+                blockType: "fingerprint",
+                matchedProvider: fpGate.visitorId
+              }
+            },
+            { config: securityConfig }
+          );
+        } catch {
+          // ignore
+        }
+
+        return createForbiddenResponse({
+          requestId,
+          engineVersion: securityConfig.version,
+          blockType: "fingerprint",
+          country: null,
+          reason: "device_fingerprint_blacklist"
+        });
+      }
     }
 
     const ipResult = await checkIP(request, { config: securityConfig });
@@ -174,7 +235,7 @@ export async function middleware(request) {
     return serveLanding(request, {
       requestId,
       reason: "fail_open",
-      engineVersion: "2.0.0"
+      engineVersion: "2.1.0"
     });
   }
 }
