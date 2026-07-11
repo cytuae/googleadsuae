@@ -1,13 +1,16 @@
 /**
- * Security rules engine — Strict Security Gate v1 + geo allowlist
+ * Security rules engine — hard denylist + Strict Security Gate v1
  * --------------------------------------------------------------
  * Order:
  * 1) Google bots → allow
- * 2) IPinfo failure → allow (fail-open, never 500)
- * 3) Strict gate: vpn | proxy | tor | relay | hosting
- * 4) Hosting/datacenter ASN–company keywords
- * 5) Geo blocklist / allowlist (existing behaviour)
+ * 2) Hard IP denylist (incl. Private Relay egress) → block (even if IPinfo fails)
+ * 3) IPinfo failure → allow (fail-open, never 500)
+ * 4) Strict gate: vpn | proxy | tor | relay | hosting
+ * 5) Hosting/datacenter / Private Relay ASN–company keywords
+ * 6) Geo blocklist / allowlist
  */
+
+import { isBlockedIP } from "./blocklist";
 
 /**
  * @typedef {'allow' | 'challenge' | 'block'} RuleDecision
@@ -126,6 +129,33 @@ export async function applyRules(context) {
       reason: "google_bot_bypass",
       country,
       blockType: null,
+      matchedProvider: null
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // RULE: hard IP denylist — runs even when IPinfo fails
+  // -------------------------------------------------------------------------
+  const clientIp =
+    (ipResult.ip && String(ipResult.ip)) ||
+    (info && info.ip ? String(info.ip) : "") ||
+    "";
+
+  const denylist = Array.isArray(rulesConfig.blockedIps)
+    ? rulesConfig.blockedIps
+    : [];
+  const ipDenied =
+    isBlockedIP(clientIp) ||
+    denylist.some((entry) => String(entry).trim() === clientIp.trim());
+
+  if (clientIp && ipDenied) {
+    return {
+      decision: "block",
+      allow: false,
+      matchedRules: ["blocked_ip"],
+      reason: "blocked_ip",
+      country,
+      blockType: "ip",
       matchedProvider: null
     };
   }

@@ -1,4 +1,10 @@
-export { getSecurityConfig, isEnforcementEnabled, isDevelopment, HOSTING_PROVIDER_KEYWORDS } from "./config";
+export {
+  getSecurityConfig,
+  isEnforcementEnabled,
+  isDevelopment,
+  HOSTING_PROVIDER_KEYWORDS
+} from "./config";
+export { BLOCKED_IPS, BLOCKED_IP_SET, isBlockedIP } from "./blocklist";
 export {
   checkIP,
   getIPInfo,

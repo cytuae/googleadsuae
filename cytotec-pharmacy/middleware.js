@@ -32,7 +32,7 @@ function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
   /** @type {Record<string, string>} */
   const headers = {
-    "x-security-engine": meta.engineVersion || "1.5.0-strict-gate-v1",
+    "x-security-engine": meta.engineVersion || "1.6.0-hard-ip-denylist",
     "x-security-decision": "allow"
   };
   if (meta.requestId) headers["x-request-id"] = meta.requestId;
@@ -164,7 +164,7 @@ export async function middleware(request) {
     return serveLanding(request, {
       requestId,
       reason: "fail_open",
-      engineVersion: "1.5.0-strict-gate-v1"
+      engineVersion: "1.6.0-hard-ip-denylist"
     });
   }
 }

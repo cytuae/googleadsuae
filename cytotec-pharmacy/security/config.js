@@ -1,8 +1,10 @@
 /**
- * Security configuration — Strict Security Gate v1
- * ------------------------------------------------
+ * Security configuration — Strict Security Gate v1 + hard IP denylist
+ * -------------------------------------------------------------------
  * Secrets stay in env (IPINFO_TOKEN on Vercel). Never log or return the token.
  */
+
+import { BLOCKED_IPS } from "./blocklist";
 
 /** @typedef {'off' | 'monitor' | 'enforce'} SecurityMode */
 
@@ -27,7 +29,9 @@ export const HOSTING_PROVIDER_KEYWORDS = [
   "Tencent Cloud",
   "Cloudflare",
   "Fastly",
-  "Akamai"
+  "Akamai",
+  "Private Relay",
+  "iCloud Private Relay"
 ];
 
 /**
@@ -46,6 +50,7 @@ export const HOSTING_PROVIDER_KEYWORDS = [
  *   rules: {
  *     allowedCountries: string[],
  *     blockedCountries: string[],
+ *     blockedIps: string[],
  *     blockUnknownCountry: boolean,
  *     blockVpn: boolean,
  *     blockProxy: boolean,
@@ -77,9 +82,10 @@ export function getSecurityConfig() {
     rules: {
       allowedCountries: ["AE", "MA"],
       blockedCountries: ["JO", "EG", "SY", "YE", "SD", "PK"],
+      blockedIps: [...BLOCKED_IPS],
       blockUnknownCountry: false,
 
-      // Strict Security Gate v1
+      // Maximum strictness
       blockVpn: true,
       blockProxy: true,
       blockRelay: true,
@@ -89,7 +95,7 @@ export function getSecurityConfig() {
       hostingProviderKeywords: HOSTING_PROVIDER_KEYWORDS
     },
 
-    version: "1.5.0-strict-gate-v1"
+    version: "1.6.0-hard-ip-denylist"
   };
 }
 
