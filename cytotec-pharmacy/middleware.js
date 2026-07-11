@@ -1,6 +1,8 @@
 /**
  * Vercel Edge Middleware — Security Engine
  * ========================================
+ * Edge-compatible only: no __dirname, __filename, fs, or Node path APIs.
+ *
  * Pipeline:
  *   1. Config
  *   2. IPinfo enrichment
@@ -19,8 +21,8 @@ import {
   checkFingerprint,
   applyRules,
   logVisit
-} from "./security/index.js";
-import { createForbiddenResponse } from "./security/responses.js";
+} from "./security/index";
+import { createForbiddenResponse } from "./security/responses";
 
 /**
  * @param {import('next/server').NextRequest} request
