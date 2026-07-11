@@ -23,15 +23,28 @@ export const config = {
 
 /**
  * @param {import('next/server').NextRequest} request
+ * @param {{ requestId?: string, reason?: string }} [meta]
  * @returns {import('next/server').NextResponse}
  */
-function serveLanding(request) {
+function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
+  /** @type {Record<string, string>} */
+  const headers = {
+    "x-security-engine": meta.engineVersion || "1.3.0-phase1-geo",
+    "x-security-decision": "allow"
+  };
+  if (meta.requestId) headers["x-request-id"] = meta.requestId;
+  if (meta.reason) headers["x-security-reason"] = meta.reason;
+
   if (url.pathname === "/" || url.pathname === "") {
     url.pathname = "/index.html";
-    return NextResponse.rewrite(url);
+    return NextResponse.rewrite(url, { headers });
   }
-  return NextResponse.next();
+  const res = NextResponse.next();
+  for (const [k, v] of Object.entries(headers)) {
+    res.headers.set(k, v);
+  }
+  return res;
 }
 
 /**
@@ -81,13 +94,21 @@ export async function middleware(request) {
       } catch {
         // never fail the request for logging
       }
-      return serveLanding(request);
+      return serveLanding(request, {
+        requestId,
+        reason: "google_bot_bypass",
+        engineVersion: getSecurityConfig().version
+      });
     }
 
     const securityConfig = getSecurityConfig();
 
     if (securityConfig.mode === "off" || !securityConfig.providers.rules) {
-      return serveLanding(request);
+      return serveLanding(request, {
+        requestId,
+        reason: "security_off",
+        engineVersion: securityConfig.version
+      });
     }
 
     const ipResult = await checkIP(request, { config: securityConfig });
@@ -128,13 +149,16 @@ export async function middleware(request) {
       });
     }
 
-    return serveLanding(request);
+    return serveLanding(request, {
+      requestId,
+      reason: rulesResult.reason || "allow"
+    });
   } catch (error) {
     // Fail-open: never take the site down with MIDDLEWARE_INVOCATION_FAILED
     console.error("[security:error]", {
       requestId,
       message: error && error.message ? error.message : String(error)
     });
-    return serveLanding(request);
+    return serveLanding(request, { requestId, reason: "fail_open" });
   }
 }
