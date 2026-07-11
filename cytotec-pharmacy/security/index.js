@@ -16,4 +16,9 @@ export { checkFingerprint } from "./fingerprint";
 export { applyRules, normalizeCountryCode, matchHostingProvider } from "./rules";
 export { logVisit } from "./logger";
 export { createForbiddenResponse, forbiddenPageHtml } from "./responses";
-export { isGoogleAdsOrSearchBot } from "./bots";
+export {
+  isGoogleAdsOrSearchBot,
+  isStatCounterBot,
+  isInstallVerifierClient,
+  isTrustedSecurityBypassBot
+} from "./bots";

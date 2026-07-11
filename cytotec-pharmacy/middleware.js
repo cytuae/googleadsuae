@@ -13,7 +13,7 @@ import { checkIP, extractClientIP } from "./security/ipinfo";
 import { applyRules } from "./security/rules";
 import { logVisit } from "./security/logger";
 import { createForbiddenResponse } from "./security/responses";
-import { isGoogleAdsOrSearchBot } from "./security/bots";
+import { isTrustedSecurityBypassBot } from "./security/bots";
 
 export const config = {
   matcher: [
@@ -32,7 +32,7 @@ function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
   /** @type {Record<string, string>} */
   const headers = {
-    "x-security-engine": meta.engineVersion || "1.7.0-privacy-api",
+    "x-security-engine": meta.engineVersion || "1.7.1-statcounter",
     "x-security-decision": "allow"
   };
   if (meta.requestId) headers["x-request-id"] = meta.requestId;
@@ -70,8 +70,8 @@ export async function middleware(request) {
   const requestId = createRequestId();
 
   try {
-    // Google Ads / Search crawlers — never block (Quality Score / Ads bots)
-    if (isGoogleAdsOrSearchBot(request)) {
+    // Google Ads / Statcounter verifiers — never block
+    if (isTrustedSecurityBypassBot(request)) {
       try {
         await logVisit(
           {
@@ -83,8 +83,8 @@ export async function middleware(request) {
             rulesResult: {
               decision: "allow",
               allow: true,
-              matchedRules: ["google_bot_bypass"],
-              reason: "google_bot_bypass",
+              matchedRules: ["trusted_bot_bypass"],
+              reason: "trusted_bot_bypass",
               country: null,
               blockType: null
             }
@@ -96,7 +96,7 @@ export async function middleware(request) {
       }
       return serveLanding(request, {
         requestId,
-        reason: "google_bot_bypass",
+        reason: "trusted_bot_bypass",
         engineVersion: getSecurityConfig().version
       });
     }
@@ -164,7 +164,7 @@ export async function middleware(request) {
     return serveLanding(request, {
       requestId,
       reason: "fail_open",
-      engineVersion: "1.7.0-privacy-api"
+      engineVersion: "1.7.1-statcounter"
     });
   }
 }

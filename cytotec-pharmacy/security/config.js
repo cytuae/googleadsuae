@@ -64,7 +64,7 @@ export function getSecurityConfig() {
       hostingProviderKeywords: HOSTING_PROVIDER_KEYWORDS
     },
 
-    version: "1.7.0-privacy-api"
+    version: "1.7.1-statcounter"
   };
 }
 
