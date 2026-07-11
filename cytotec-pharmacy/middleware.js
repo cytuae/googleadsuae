@@ -38,14 +38,20 @@ export const config = {
 };
 
 /**
+ * Paths that skip the public security gate (auth handled elsewhere).
+ * Includes private admin dashboard so geo/IP rules never lock out the owner.
  * @param {import('next/server').NextRequest} request
  * @returns {boolean}
  */
-function isFingerprintBypassPath(request) {
+function isSecurityBypassPath(request) {
   const path = request.nextUrl.pathname || "";
   return (
     path === "/api/security/fingerprint" ||
     path.startsWith("/api/security/fingerprint/") ||
+    path === "/api/security/ingest-event" ||
+    path.startsWith("/api/admin/") ||
+    path === "/admin" ||
+    path.startsWith("/admin/") ||
     path === "/access-denied" ||
     path === "/access-denied.html"
   );
@@ -98,8 +104,8 @@ export async function middleware(request) {
   const requestId = createRequestId();
 
   try {
-    // Fingerprint API + access-denied — never redirect-loop / never HTML-block the API
-    if (isFingerprintBypassPath(request)) {
+    // Fingerprint API, ingest, admin, access-denied — no public gate / no loops
+    if (isSecurityBypassPath(request)) {
       return NextResponse.next();
     }
 

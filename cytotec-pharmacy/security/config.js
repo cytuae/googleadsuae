@@ -71,7 +71,7 @@ export function getSecurityConfig() {
       hostingProviderKeywords: HOSTING_PROVIDER_KEYWORDS
     },
 
-    version: "2.1.0"
+    version: "2.2.0"
   };
 }
 

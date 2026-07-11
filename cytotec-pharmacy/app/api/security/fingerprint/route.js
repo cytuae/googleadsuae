@@ -9,6 +9,11 @@
 import { NextResponse } from "next/server";
 import { extractClientIP } from "../../../../security/ipinfo";
 import { isFingerprintBlacklisted } from "../../../../security/blacklists";
+import {
+  appendSecurityEvent,
+  inferBrowser,
+  inferDevice
+} from "../../../../security/event-store";
 
 export const runtime = "nodejs";
 
@@ -118,37 +123,53 @@ export async function POST(request) {
     const data = validated.data;
     const ip = extractClientIP(request);
     const blocked = isFingerprintBlacklisted(data.visitorId);
+    const timestamp = new Date().toISOString();
+    const screen = `${data.screenWidth}x${data.screenHeight}`;
+    const eventPayload = {
+      event: "DEVICE_FINGERPRINT",
+      timestamp,
+      visitorId: data.visitorId,
+      ip: ip === "unknown" ? null : ip,
+      blocked,
+      reason: blocked ? "device_fingerprint_blacklist" : "fingerprint_ok",
+      userAgent: data.userAgent,
+      platform: data.platform,
+      language: data.language,
+      timezone: data.timezone,
+      screen,
+      devicePixelRatio: data.devicePixelRatio,
+      touchSupport: data.touchSupport,
+      hardwareConcurrency: data.hardwareConcurrency,
+      deviceMemory: data.deviceMemory,
+      pathname: data.pathname,
+      gclid: data.gclid,
+      gbraid: data.gbraid,
+      wbraid: data.wbraid,
+      browser: inferBrowser(data.userAgent),
+      device: inferDevice(data),
+      provider: null,
+      company: null,
+      asn: null,
+      country: null
+    };
 
-    // Temporary internal admin log mode — Vercel Runtime Logs only
-    console.log(
-      JSON.stringify({
-        event: "DEVICE_FINGERPRINT",
-        timestamp: new Date().toISOString(),
-        visitorId: data.visitorId,
-        ip: ip === "unknown" ? null : ip,
-        blocked,
-        userAgent: data.userAgent,
-        platform: data.platform,
-        language: data.language,
-        timezone: data.timezone,
-        screen: `${data.screenWidth}x${data.screenHeight}`,
-        devicePixelRatio: data.devicePixelRatio,
-        touchSupport: data.touchSupport,
-        hardwareConcurrency: data.hardwareConcurrency,
-        deviceMemory: data.deviceMemory,
-        pathname: data.pathname,
-        gclid: data.gclid,
-        gbraid: data.gbraid,
-        wbraid: data.wbraid,
-        utm_source: data.utm_source,
-        utm_medium: data.utm_medium,
-        utm_campaign: data.utm_campaign,
-        utm_term: data.utm_term,
-        utm_content: data.utm_content
-      })
-    );
+    // Vercel Runtime Logs (admin mode)
+    console.log(JSON.stringify(eventPayload));
+
+    // Dashboard event store — sync all fingerprints (once/session client-side).
+    // Never await failure into a 500; fire-and-forget after response path.
+    const syncMode = String(process.env.SECURITY_EVENT_SYNC || "all").toLowerCase();
+    const shouldSync =
+      syncMode === "all" || (syncMode !== "off" && blocked === true);
 
     if (blocked) {
+      if (shouldSync) {
+        try {
+          await appendSecurityEvent(eventPayload);
+        } catch {
+          // ignore
+        }
+      }
       const res = NextResponse.json(
         { ok: true, blocked: true, reason: "device_fingerprint_blacklist" },
         { status: 403 }
@@ -156,6 +177,10 @@ export async function POST(request) {
       res.cookies.set("security_blocked", "1", COOKIE_BASE);
       res.cookies.set("device_fingerprint", data.visitorId, COOKIE_BASE);
       return res;
+    }
+
+    if (shouldSync) {
+      void appendSecurityEvent(eventPayload).catch(() => {});
     }
 
     const res = NextResponse.json(
