@@ -37,6 +37,7 @@
  */
 
 const IPINFO_BASE = "https://ipinfo.io";
+const IPINFO_LOOKUP_BASE = "https://api.ipinfo.io/lookup";
 
 /** @type {Map<string, { expiresAt: number, value: IPInfoNormalized }>} */
 const ipCache = new Map();
@@ -269,18 +270,17 @@ function emptyInfo(ip) {
 }
 
 /**
- * @param {string} pathWithIp — e.g. `/1.2.3.4/privacy`
- * @param {string} token
+ * @param {string} url
  * @param {AbortSignal} signal
  * @param {typeof fetch} fetchImpl
+ * @param {Record<string, string>} [headers]
  */
-async function fetchJson(pathWithIp, token, signal, fetchImpl) {
-  // Classic IPinfo endpoints expect token as query param (never log this URL).
-  const url = `${IPINFO_BASE}${pathWithIp}?token=${encodeURIComponent(token)}`;
+async function fetchJsonUrl(url, signal, fetchImpl, headers = {}) {
   const response = await fetchImpl(url, {
     method: "GET",
     headers: {
-      Accept: "application/json"
+      Accept: "application/json",
+      ...headers
     },
     signal
   });
@@ -296,7 +296,7 @@ async function fetchJson(pathWithIp, token, signal, fetchImpl) {
 }
 
 /**
- * Query IPinfo Privacy Detection (+ core enrichment for ASN/company/country).
+ * Query IPinfo Privacy Detection, with Plus lookup fallback.
  *
  * @param {string} ip
  * @param {{
@@ -346,35 +346,63 @@ export async function getIPInfo(ip, options = {}) {
   const encoded = encodeURIComponent(ip);
 
   try {
-    const [privacyResult, coreResult] = await Promise.all([
-      fetchJson(`/${encoded}/privacy`, token, controller.signal, fetchImpl),
-      fetchJson(`/${encoded}/json`, token, controller.signal, fetchImpl)
-    ]);
+    // 1) Privacy Detection Standard API
+    const privacyResult = await fetchJsonUrl(
+      `${IPINFO_BASE}/${encoded}/privacy?token=${encodeURIComponent(token)}`,
+      controller.signal,
+      fetchImpl
+    );
 
-    // Privacy Detection is required for enforcement signals
-    if (!privacyResult.ok || !privacyResult.data) {
+    // 2) Core JSON (ASN / company / country) — best-effort
+    const coreResult = await fetchJsonUrl(
+      `${IPINFO_BASE}/${encoded}/json?token=${encodeURIComponent(token)}`,
+      controller.signal,
+      fetchImpl
+    );
+
+    if (privacyResult.ok && privacyResult.data) {
+      const info = normalizeIPInfo(
+        privacyResult.data,
+        coreResult.ok ? coreResult.data : {},
+        ip
+      );
+      writeCache(ip, info, cacheTtlMs);
+      return {
+        info,
+        cached: false,
+        ok: true,
+        reason: "ipinfo_privacy_ok"
+      };
+    }
+
+    // 3) Fallback: IPinfo Plus/Core lookup (Bearer) — already provisioned on Vercel
+    const lookupResult = await fetchJsonUrl(
+      `${IPINFO_LOOKUP_BASE}/${encoded}`,
+      controller.signal,
+      fetchImpl,
+      { Authorization: `Bearer ${token}` }
+    );
+
+    if (!lookupResult.ok || !lookupResult.data) {
       return {
         info: emptyInfo(ip),
         cached: false,
         ok: false,
         reason: privacyResult.status
           ? `ipinfo_privacy_http_${privacyResult.status}`
-          : "ipinfo_privacy_failed"
+          : lookupResult.status
+            ? `ipinfo_lookup_http_${lookupResult.status}`
+            : "ipinfo_failed"
       };
     }
 
-    const info = normalizeIPInfo(
-      privacyResult.data,
-      coreResult.ok ? coreResult.data : {},
-      ip
-    );
+    const info = normalizeIPInfo(lookupResult.data, ip);
     writeCache(ip, info, cacheTtlMs);
-
     return {
       info,
       cached: false,
       ok: true,
-      reason: "ipinfo_privacy_ok"
+      reason: "ipinfo_lookup_ok"
     };
   } catch (error) {
     const aborted =

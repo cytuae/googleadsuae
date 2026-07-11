@@ -46,7 +46,7 @@ export function getSecurityConfig() {
     },
 
     ipinfo: {
-      timeoutMs: 2000,
+      timeoutMs: 2500,
       cacheTtlMs: 5 * 60 * 1000
     },
 
