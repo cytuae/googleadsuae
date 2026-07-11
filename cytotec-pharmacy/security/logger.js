@@ -1,6 +1,9 @@
 /**
- * Security visit logger — blocked requests as structured JSON
- * ----------------------------------------------------------
+ * Security visit logger — Security Layer v2
+ * ----------------------------------------
+ * Logs blocked visits as:
+ * { timestamp, ip, provider, company, asn, country, reason }
+ *
  * Never logs secrets (IPINFO_TOKEN).
  */
 
@@ -24,29 +27,34 @@ export async function logVisit(payload, context = {}) {
     console.log(
       JSON.stringify({
         timestamp: payload.timestamp || new Date().toISOString(),
-        IP: payload.ip || info.ip || null,
-        pathname: payload.path || null,
-        country: rules.country || info.country || null,
-        ASN: info.asn || null,
+        ip: payload.ip || info.ip || null,
+        provider:
+          rules.matchedProvider ||
+          info.privacy_service ||
+          info.provider ||
+          null,
         company: info.company || null,
-        vpn: info.is_vpn === true,
-        proxy: info.is_proxy === true,
-        tor: info.is_tor === true,
-        relay: info.is_relay === true,
-        hosting: info.is_hosting === true,
-        blockReason: rules.reason || "blocked"
+        asn: info.asn || null,
+        country: rules.country || info.country || null,
+        reason: rules.reason || "blocked"
       })
     );
     return;
   }
 
-  if (rules.reason === "google_bot_bypass") {
+  if (
+    rules.reason === "google_bot_bypass" ||
+    rules.reason === "trusted_bot_bypass"
+  ) {
     console.log(
       JSON.stringify({
         timestamp: payload.timestamp || new Date().toISOString(),
-        IP: payload.ip || null,
-        pathname: payload.path || null,
-        event: "google_bot_bypass"
+        ip: payload.ip || null,
+        provider: null,
+        company: null,
+        asn: null,
+        country: null,
+        reason: rules.reason
       })
     );
   }

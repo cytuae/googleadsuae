@@ -1,0 +1,6 @@
+{
+  "_comment": "Permanent provider/company blacklist (Security Layer v2). Add provider or company name substrings to the \"providers\" array (case-insensitive). Edit this file and redeploy — middleware logic does not need changes.",
+  "providers": [
+    "iCloud Private Relay"
+  ]
+}

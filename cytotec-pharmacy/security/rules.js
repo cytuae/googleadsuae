@@ -1,16 +1,27 @@
 /**
- * Security rules engine — hard denylist + Strict Security Gate v1
- * --------------------------------------------------------------
+ * Security rules engine — Security Layer v2
+ * -----------------------------------------
  * Order:
  * 1) Google bots → allow
- * 2) Hard IP denylist (incl. Private Relay egress) → block (even if IPinfo fails)
+ * 2) IP blacklist (ip-blacklist.json) → 403 (even if IPinfo fails)
  * 3) IPinfo failure → allow (fail-open, never 500)
- * 4) Strict gate: vpn | proxy | tor | relay | hosting
- * 5) Hosting/datacenter / Private Relay ASN–company keywords
- * 6) Geo blocklist / allowlist
+ * 4) Provider/company blacklist (provider-blacklist.json) → 403
+ * 5) ASN blacklist (asn-blacklist.json) → 403
+ * 6) Strict gate: vpn | proxy | tor | relay | hosting
+ * 7) Hosting/datacenter ASN–company keywords
+ * 8) Geo blocklist / allowlist
+ *
+ * Future entries:
+ *   IPs       → security/ip-blacklist.json
+ *   Providers → security/provider-blacklist.json
+ *   ASNs      → security/asn-blacklist.json
  */
 
 import { isBlockedIP } from "./blocklist";
+import {
+  isProviderBlacklisted,
+  isAsnBlacklisted
+} from "./blacklists";
 
 /**
  * @typedef {'allow' | 'challenge' | 'block'} RuleDecision
@@ -134,7 +145,8 @@ export async function applyRules(context) {
   }
 
   // -------------------------------------------------------------------------
-  // RULE: hard IP denylist — runs even when IPinfo fails
+  // RULE 1: IP blacklist (ip-blacklist.json) — runs even when IPinfo fails
+  // Add future IPs in security/ip-blacklist.json → "ips"
   // -------------------------------------------------------------------------
   const clientIp =
     (ipResult.ip && String(ipResult.ip)) ||
@@ -152,8 +164,8 @@ export async function applyRules(context) {
     return {
       decision: "block",
       allow: false,
-      matchedRules: ["blocked_ip"],
-      reason: "blocked_ip",
+      matchedRules: ["ip_blacklist"],
+      reason: "ip_blacklist",
       country,
       blockType: "ip",
       matchedProvider: null
@@ -175,10 +187,48 @@ export async function applyRules(context) {
     };
   }
 
-  // -------------------------------------------------------------------------
-  // STRICT SECURITY GATE v1 — anonymity / hosting flags
-  // -------------------------------------------------------------------------
   if (info) {
+    // -----------------------------------------------------------------------
+    // RULE 2: Provider/company blacklist (provider-blacklist.json)
+    // Add future providers in security/provider-blacklist.json → "providers"
+    // -----------------------------------------------------------------------
+    const providerHit = isProviderBlacklisted(
+      info.privacy_service || info.provider || null,
+      info.company || null,
+      info.privacy_service || null
+    );
+
+    if (providerHit.matched) {
+      return {
+        decision: "block",
+        allow: false,
+        matchedRules: ["provider_blacklist"],
+        reason: "provider_blacklist",
+        country,
+        blockType: "provider",
+        matchedProvider: providerHit.value
+      };
+    }
+
+    // -----------------------------------------------------------------------
+    // RULE 3: ASN blacklist (asn-blacklist.json)
+    // Add future ASNs in security/asn-blacklist.json → "asns"
+    // -----------------------------------------------------------------------
+    if (isAsnBlacklisted(info.asn)) {
+      return {
+        decision: "block",
+        allow: false,
+        matchedRules: ["asn_blacklist"],
+        reason: "asn_blacklist",
+        country,
+        blockType: "asn",
+        matchedProvider: null
+      };
+    }
+
+    // -----------------------------------------------------------------------
+    // RULE 4: Strict gate — vpn | proxy | tor | relay | hosting
+    // -----------------------------------------------------------------------
     if (rulesConfig.blockVpn && info.is_vpn === true) {
       return {
         decision: "block",
@@ -243,13 +293,13 @@ export async function applyRules(context) {
     // Hosting / datacenter provider keywords (ASN + company)
     // -----------------------------------------------------------------------
     if (rulesConfig.blockHostingProviders) {
-      const providerHit = matchHostingProvider(
+      const hostingHit = matchHostingProvider(
         info.asn,
         info.company,
         rulesConfig.hostingProviderKeywords || []
       );
 
-      if (providerHit.matched) {
+      if (hostingHit.matched) {
         return {
           decision: "block",
           allow: false,
@@ -257,7 +307,7 @@ export async function applyRules(context) {
           reason: "blocked_hosting_provider",
           country,
           blockType: "hosting_provider",
-          matchedProvider: providerHit.keyword
+          matchedProvider: hostingHit.keyword
         };
       }
     }

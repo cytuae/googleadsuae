@@ -1,8 +1,18 @@
 /**
- * Edge security middleware — strict IP protection (dr-ohood.clinic)
- * ----------------------------------------------------------------
- * IPinfo Privacy Detection → block vpn/proxy/tor/relay/hosting +
- * datacenter ASN/company keywords. Fail-open on errors. Never 500.
+ * Edge security middleware — Security Layer v2 (dr-ohood.clinic)
+ * -------------------------------------------------------------
+ * Check order:
+ *   1. IP blacklist → 403
+ *   2. Provider/company blacklist → 403
+ *   3. ASN blacklist → 403
+ *   4. vpn | proxy | tor | relay | hosting
+ *
+ * Blacklists load from JSON (edit without changing this file):
+ *   security/ip-blacklist.json
+ *   security/provider-blacklist.json
+ *   security/asn-blacklist.json
+ *
+ * Fail-open on errors. Never 500. Never expose secrets.
  *
  * Excludes: /_next/*, assets, images, css, js, fonts, favicon, robots, sitemap
  */
@@ -32,7 +42,7 @@ function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
   /** @type {Record<string, string>} */
   const headers = {
-    "x-security-engine": meta.engineVersion || "1.7.1-statcounter",
+    "x-security-engine": meta.engineVersion || "2.0.0",
     "x-security-decision": "allow"
   };
   if (meta.requestId) headers["x-request-id"] = meta.requestId;
@@ -164,7 +174,7 @@ export async function middleware(request) {
     return serveLanding(request, {
       requestId,
       reason: "fail_open",
-      engineVersion: "1.7.1-statcounter"
+      engineVersion: "2.0.0"
     });
   }
 }

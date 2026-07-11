@@ -1,7 +1,12 @@
 /**
- * Security configuration — strict IP protection for dr-ohood.clinic
- * -----------------------------------------------------------------
+ * Security configuration — Security Layer v2
+ * ------------------------------------------
  * Secrets stay in env (IPINFO_TOKEN on Vercel). Never log or return the token.
+ *
+ * Permanent blacklists (edit JSON, redeploy — no middleware changes):
+ *   - security/ip-blacklist.json
+ *   - security/provider-blacklist.json
+ *   - security/asn-blacklist.json
  */
 
 import { BLOCKED_IPS } from "./blocklist";
@@ -53,6 +58,7 @@ export function getSecurityConfig() {
     rules: {
       allowedCountries: ["AE", "MA"],
       blockedCountries: ["JO", "EG", "SY", "YE", "SD", "PK"],
+      // Sourced from security/ip-blacklist.json — add future IPs there
       blockedIps: [...BLOCKED_IPS],
       blockUnknownCountry: false,
       blockVpn: true,
@@ -64,7 +70,7 @@ export function getSecurityConfig() {
       hostingProviderKeywords: HOSTING_PROVIDER_KEYWORDS
     },
 
-    version: "1.7.1-statcounter"
+    version: "2.0.0"
   };
 }
 

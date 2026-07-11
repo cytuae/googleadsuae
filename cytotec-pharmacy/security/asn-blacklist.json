@@ -1,0 +1,4 @@
+{
+  "_comment": "Permanent ASN blacklist (Security Layer v2). Add ASN numbers to the \"asns\" array as \"AS12345\" or \"12345\". Edit this file and redeploy — middleware logic does not need changes.",
+  "asns": []
+}

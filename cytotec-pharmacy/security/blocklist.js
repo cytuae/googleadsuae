@@ -1,68 +1,14 @@
 /**
- * Hard IP denylist — CYT-UAE Recent Pageload export
- * -------------------------------------------------
- * Every IP observed in:
- * RecentPageload-CYT-UAE-P13174730-2026-06-19 … 2026-07-11
- * Includes iCloud Private Relay egress IPs.
+ * Hard IP denylist — thin wrapper over Security Layer v2 JSON
+ * -----------------------------------------------------------
+ * Source of truth: security/ip-blacklist.json
+ * Add future IPs there (not in this file).
  */
 
+import { loadIpBlacklist, isIpBlacklisted } from "./blacklists";
+
 /** @type {readonly string[]} */
-export const BLOCKED_IPS = Object.freeze([
-  "104.28.38.183",
-  "109.177.16.118",
-  "109.177.166.16",
-  "146.75.166.0",
-  "146.75.166.1",
-  "172.225.73.100",
-  "176.204.23.162",
-  "176.204.49.0",
-  "176.205.217.93",
-  "176.205.87.242",
-  "2.48.146.170",
-  "2.48.217.242",
-  "2.48.254.219",
-  "2.48.42.6",
-  "2.49.106.112",
-  "2.50.15.10",
-  "2.50.55.29",
-  "217.164.233.74",
-  "217.164.81.5",
-  "217.165.0.138",
-  "217.165.151.240",
-  "217.165.19.236",
-  "217.165.249.61",
-  "31.215.12.240",
-  "31.215.181.235",
-  "31.215.220.15",
-  "31.215.65.130",
-  "31.218.188.15",
-  "31.218.62.246",
-  "31.219.95.53",
-  "5.107.161.232",
-  "5.107.176.107",
-  "5.193.133.161",
-  "5.193.193.201",
-  "5.193.20.217",
-  "5.38.30.107",
-  "5.38.31.1",
-  "5.38.51.116",
-  "83.110.120.182",
-  "83.110.188.155",
-  "86.97.193.239",
-  "86.97.30.101",
-  "86.98.2.134",
-  "86.99.33.133",
-  "87.201.71.1",
-  "91.73.42.128",
-  "92.96.156.122",
-  "92.96.229.158",
-  "92.98.82.171",
-  "92.99.173.195",
-  "94.201.106.83",
-  "94.205.11.74",
-  "94.57.28.165",
-  "94.59.14.126"
-]);
+export const BLOCKED_IPS = Object.freeze(loadIpBlacklist());
 
 /** @type {ReadonlySet<string>} */
 export const BLOCKED_IP_SET = new Set(BLOCKED_IPS);
@@ -72,6 +18,5 @@ export const BLOCKED_IP_SET = new Set(BLOCKED_IPS);
  * @returns {boolean}
  */
 export function isBlockedIP(ip) {
-  if (!ip || typeof ip !== "string") return false;
-  return BLOCKED_IP_SET.has(ip.trim());
+  return isIpBlacklisted(ip);
 }
