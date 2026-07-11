@@ -4,7 +4,7 @@
   /* ===== SITE CONFIG — عدّلي هذه القيم قبل النشر ===== */
   var SITE = window.SITE_CONFIG || {
     whatsapp: "971547952044",
-    domain: "https://example.com",
+    domain: "https://dr-ohood.clinic",
     city: "المملكة العربية السعودية",
     hours: "الرد خلال ساعات العمل",
     licenseNote: "الترخيص الرسمي متاح عند الطلب عبر واتساب",
