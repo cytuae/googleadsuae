@@ -1,3 +1,11 @@
 {
-  "framework": "nextjs"
+  "framework": null,
+  "buildCommand": "mkdir -p .vercel-out && cp -R public/. .vercel-out/",
+  "outputDirectory": ".vercel-out",
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/index.html"
+    }
+  ]
 }
