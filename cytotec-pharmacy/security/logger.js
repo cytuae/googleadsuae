@@ -1,8 +1,7 @@
 /**
- * Security visit logger (scaffold)
- * --------------------------------
- * Future: ship structured events to your SIEM, analytics, or edge KV.
- * Today: no-op (safe for production scaffolding).
+ * Security visit logger
+ * ---------------------
+ * Emits structured security events (Vercel / Edge console → production logs).
  */
 
 /**
@@ -18,10 +17,6 @@
  */
 
 /**
- * Persist or emit a visit security event.
- * Must never throw into the request path in a way that breaks the site —
- * callers should still try/catch around this.
- *
  * @param {VisitLogPayload} payload
  * @param {{ config?: Object }} [context]
  * @returns {Promise<void>}
@@ -29,9 +24,36 @@
 export async function logVisit(payload, context = {}) {
   void context;
 
-  // STAGE: logger — intentionally silent until a sink is configured
-  // Example future sinks: console (dev), Vercel logs, HTTP webhook, KV, analytics
   if (typeof payload !== "object" || payload === null) {
+    return;
+  }
+
+  const rules = payload.rulesResult || {};
+  const info = payload.ipResult && payload.ipResult.info ? payload.ipResult.info : {};
+
+  const event = {
+    type: "security_visit",
+    timestamp: payload.timestamp,
+    requestId: payload.requestId,
+    method: payload.method,
+    path: payload.path,
+    ip: payload.ip,
+    decision: rules.decision || "allow",
+    reason: rules.reason || null,
+    country: rules.country || info.country || null,
+    matchedRules: rules.matchedRules || [],
+    blockType: rules.blockType || null
+  };
+
+  // Always log blocks; keep allow noise low unless needed later
+  if (rules.decision === "block" || rules.reason === "blocked_country") {
+    console.log("[security:block]", {
+      reason: "blocked_country",
+      country: event.country || "JO",
+      requestId: event.requestId,
+      ip: event.ip,
+      path: event.path
+    });
     return;
   }
 

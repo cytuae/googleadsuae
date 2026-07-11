@@ -1,17 +1,13 @@
 /**
  * Vercel Edge Middleware — Security Engine
  * ========================================
- * Runs on every matched request BEFORE the page/asset is served.
- *
  * Pipeline:
- *   1. Load config
- *   2. IP intelligence          → checkIP() / getIPInfo()
- *   3. Fingerprint signals      → checkFingerprint()
- *   4. Rules / decision engine  → applyRules()
- *   5. Structured visit logging → logVisit()
- *   6. Continue (no blocking in this phase)
- *
- * Current policy: ALLOW ALL. IPinfo enrichment is monitor-only.
+ *   1. Config
+ *   2. IPinfo enrichment
+ *   3. Fingerprint (scaffold)
+ *   4. Rules (country block: JO)
+ *   5. Logging
+ *   6. Allow or 403 Forbidden
  */
 
 import { NextResponse } from "next/server";
@@ -24,6 +20,7 @@ import {
   applyRules,
   logVisit
 } from "./security/index.js";
+import { createForbiddenResponse } from "./security/responses.js";
 
 /**
  * @param {import('next/server').NextRequest} request
@@ -48,12 +45,10 @@ export async function middleware(request) {
 
   // -------------------------------------------------------------------------
   // STAGE 1 — IP intelligence (IPinfo)
-  // Enriches the request; never blocks.
   // -------------------------------------------------------------------------
   const ipResult = await checkIP(request, ctx);
   ctx.ipResult = ipResult;
 
-  // Development-only visibility into normalized IPinfo payload
   if (isDevelopment()) {
     console.log("[security:ipinfo]", {
       requestId,
@@ -65,7 +60,7 @@ export async function middleware(request) {
   }
 
   // -------------------------------------------------------------------------
-  // STAGE 2 — Fingerprint signals (scaffold)
+  // STAGE 2 — Fingerprint signals (scaffold / disabled)
   // -------------------------------------------------------------------------
   const fingerprintResult = await checkFingerprint(request, {
     ...ctx,
@@ -74,7 +69,7 @@ export async function middleware(request) {
   ctx.fingerprintResult = fingerprintResult;
 
   // -------------------------------------------------------------------------
-  // STAGE 3 — Rules engine (scaffold — always allow)
+  // STAGE 3 — Rules engine
   // -------------------------------------------------------------------------
   const rulesResult = await applyRules({
     request,
@@ -85,7 +80,7 @@ export async function middleware(request) {
   ctx.rulesResult = rulesResult;
 
   // -------------------------------------------------------------------------
-  // STAGE 4 — Visit logging (scaffold)
+  // STAGE 4 — Visit logging
   // -------------------------------------------------------------------------
   if (config.providers.logger) {
     try {
@@ -108,18 +103,17 @@ export async function middleware(request) {
   }
 
   // -------------------------------------------------------------------------
-  // STAGE 5 — Enforcement gate (disabled)
+  // STAGE 5 — Enforcement gate
   // -------------------------------------------------------------------------
   const shouldBlock =
     isEnforcementEnabled(config) && rulesResult.allow === false;
 
   if (shouldBlock) {
-    return new NextResponse("Forbidden", {
-      status: 403,
-      headers: {
-        "x-security-engine": config.version,
-        "x-request-id": requestId
-      }
+    return createForbiddenResponse({
+      requestId,
+      engineVersion: config.version,
+      blockType: rulesResult.blockType || "country",
+      country: rulesResult.country || null
     });
   }
 
@@ -137,8 +131,8 @@ export async function middleware(request) {
   response.headers.set("x-security-decision", rulesResult.decision || "allow");
   response.headers.set("x-request-id", requestId);
 
-  if (ipResult.info?.country) {
-    response.headers.set("x-security-country", String(ipResult.info.country));
+  if (rulesResult.country) {
+    response.headers.set("x-security-country", String(rulesResult.country));
   }
 
   return response;

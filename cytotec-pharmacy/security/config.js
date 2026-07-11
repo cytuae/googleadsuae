@@ -23,20 +23,25 @@
  *     timeoutMs: number,
  *     cacheTtlMs: number
  *   },
+ *   rules: {
+ *     blockedCountries: string[],
+ *     blockVpn: boolean,
+ *     blockProxy: boolean,
+ *     blockRelay: boolean,
+ *     blockHosting: boolean
+ *   },
  *   version: string
  * }}
  */
 export function getSecurityConfig() {
   return {
-    // monitor = run checks & log, never block
-    // enforce = allow blocking (future)
-    // off = skip providers
-    mode: "monitor",
+    // enforce = honor block decisions from applyRules()
+    mode: "enforce",
 
     providers: {
       ipinfo: true,
-      fingerprint: false, // scaffold only
-      rules: true, // scaffold — currently always allow
+      fingerprint: false,
+      rules: true,
       logger: true
     },
 
@@ -45,13 +50,21 @@ export function getSecurityConfig() {
       cacheTtlMs: 5 * 60 * 1000
     },
 
-    version: "1.1.0-ipinfo"
+    rules: {
+      // ISO 3166-1 alpha-2
+      blockedCountries: ["JO"],
+      // Disabled for now — do not evaluate these signals
+      blockVpn: false,
+      blockProxy: false,
+      blockRelay: false,
+      blockHosting: false
+    },
+
+    version: "1.2.0-country-block"
   };
 }
 
 /**
- * Whether the security engine should attempt to block requests.
- * Always false until enforcement is intentionally enabled.
  * @param {ReturnType<typeof getSecurityConfig>} [config]
  * @returns {boolean}
  */
@@ -60,7 +73,6 @@ export function isEnforcementEnabled(config = getSecurityConfig()) {
 }
 
 /**
- * Development logging helper (Edge-safe).
  * @returns {boolean}
  */
 export function isDevelopment() {

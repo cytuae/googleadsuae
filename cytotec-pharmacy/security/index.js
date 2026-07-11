@@ -7,5 +7,6 @@ export {
   isLookupableIP
 } from "./ipinfo.js";
 export { checkFingerprint } from "./fingerprint.js";
-export { applyRules } from "./rules.js";
+export { applyRules, normalizeCountryCode } from "./rules.js";
 export { logVisit } from "./logger.js";
+export { createForbiddenResponse, forbiddenPageHtml } from "./responses.js";
