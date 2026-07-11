@@ -1,7 +1,9 @@
+import { permanentRedirect } from "next/navigation";
+
 /**
- * Fallback route. The real landing page is /public/index.html
- * (rewritten from "/" in next.config.js).
+ * No Edge middleware — avoid MIDDLEWARE_INVOCATION_FAILED on Vercel.
+ * Send visitors to the static landing page in /public/index.html
  */
 export default function Page() {
-  return null;
+  permanentRedirect("/index.html");
 }

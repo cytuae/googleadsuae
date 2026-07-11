@@ -1,14 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Serve the static landing page without Edge middleware.
-  async rewrites() {
-    return [
-      {
-        source: "/",
-        destination: "/index.html"
-      }
-    ];
-  }
+  // Landing page is /public/index.html (linked from app/page.js).
+  // Security middleware is fully removed until Edge-safe again.
 };
 
 module.exports = nextConfig;
