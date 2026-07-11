@@ -14,6 +14,10 @@
  * @property {string|null} asn
  * @property {string|null} company
  * @property {boolean|null} is_anonymous
+ * @property {boolean|null} is_proxy
+ * @property {boolean|null} is_vpn
+ * @property {boolean|null} is_relay
+ * @property {boolean|null} is_tor
  * @property {boolean|null} is_hosting
  */
 
@@ -138,6 +142,29 @@ export function normalizeIPInfo(raw, fallbackIp) {
     asNullableString(data.company) ||
     null;
 
+  const privacy =
+    data.privacy && typeof data.privacy === "object" ? data.privacy : null;
+
+  const isProxy =
+    asNullableBoolean(anonymousObj?.is_proxy) ??
+    asNullableBoolean(privacy?.proxy) ??
+    asNullableBoolean(data.is_proxy);
+
+  const isVpn =
+    asNullableBoolean(anonymousObj?.is_vpn) ??
+    asNullableBoolean(privacy?.vpn) ??
+    asNullableBoolean(data.is_vpn);
+
+  const isRelay =
+    asNullableBoolean(anonymousObj?.is_relay) ??
+    asNullableBoolean(privacy?.relay) ??
+    asNullableBoolean(data.is_relay);
+
+  const isTor =
+    asNullableBoolean(anonymousObj?.is_tor) ??
+    asNullableBoolean(privacy?.tor) ??
+    asNullableBoolean(data.is_tor);
+
   let isAnonymous = asNullableBoolean(data.is_anonymous);
   if (isAnonymous === null && anonymousObj) {
     isAnonymous = Boolean(
@@ -148,8 +175,16 @@ export function normalizeIPInfo(raw, fallbackIp) {
         anonymousObj.is_anonymous
     );
   }
+  if (isAnonymous === null && privacy) {
+    isAnonymous = Boolean(
+      privacy.proxy || privacy.vpn || privacy.relay || privacy.tor
+    );
+  }
 
   let isHosting = asNullableBoolean(data.is_hosting);
+  if (isHosting === null && asNullableBoolean(privacy?.hosting) !== null) {
+    isHosting = asNullableBoolean(privacy.hosting);
+  }
   if (isHosting === null && asNullableString(as.type)) {
     isHosting = as.type.toLowerCase() === "hosting";
   }
@@ -168,6 +203,10 @@ export function normalizeIPInfo(raw, fallbackIp) {
     asn,
     company,
     is_anonymous: isAnonymous,
+    is_proxy: isProxy,
+    is_vpn: isVpn,
+    is_relay: isRelay,
+    is_tor: isTor,
     is_hosting: isHosting
   };
 }
@@ -217,6 +256,10 @@ function emptyInfo(ip) {
     asn: null,
     company: null,
     is_anonymous: null,
+    is_proxy: null,
+    is_vpn: null,
+    is_relay: null,
+    is_tor: null,
     is_hosting: null
   };
 }

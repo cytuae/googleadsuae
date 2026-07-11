@@ -55,14 +55,15 @@ export function getSecurityConfig() {
       blockedCountries: ["JO", "EG", "SY", "YE", "SD", "PK"],
       // If IPinfo has no country → allow (fail-open)
       blockUnknownCountry: false,
-      // Phase 2 — not evaluated yet
+      // Strict: block known proxies even from AE/MA
+      blockProxy: true,
+      // Still off — enable later if needed
       blockVpn: false,
-      blockProxy: false,
       blockRelay: false,
       blockHosting: false
     },
 
-    version: "1.3.0-phase1-geo"
+    version: "1.4.0-block-proxy"
   };
 }
 

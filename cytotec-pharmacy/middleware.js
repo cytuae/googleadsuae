@@ -2,6 +2,7 @@
  * Edge security middleware — Phase 1
  * ----------------------------------
  * - Google Ads/Search bots: always allow (no IPinfo, no geo block)
+ * - Known proxies: always block (even AE/MA)
  * - Country allowlist: AE, MA
  * - Country blocklist: JO, EG, SY, YE, SD, PK
  * - Any failure: fail-open (serve the page)
@@ -30,7 +31,7 @@ function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
   /** @type {Record<string, string>} */
   const headers = {
-    "x-security-engine": meta.engineVersion || "1.3.0-phase1-geo",
+    "x-security-engine": meta.engineVersion || "1.4.0-block-proxy",
     "x-security-decision": "allow"
   };
   if (meta.requestId) headers["x-request-id"] = meta.requestId;
@@ -151,7 +152,8 @@ export async function middleware(request) {
 
     return serveLanding(request, {
       requestId,
-      reason: rulesResult.reason || "allow"
+      reason: rulesResult.reason || "allow",
+      engineVersion: securityConfig.version
     });
   } catch (error) {
     // Fail-open: never take the site down with MIDDLEWARE_INVOCATION_FAILED

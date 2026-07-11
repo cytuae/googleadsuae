@@ -1,11 +1,12 @@
 /**
- * Security rules engine — Phase 1
- * -------------------------------
- * 1) Google bots are handled in middleware (never reach a block here if flagged).
- * 2) Blocked countries → block
- * 3) Allowed countries (AE, MA) → allow
- * 4) Unknown country → allow (fail-open)
- * 5) Any other known country → block
+ * Security rules engine — Phase 1 + strict proxy
+ * ----------------------------------------------
+ * 1) Google bots → allow
+ * 2) Known proxy → block (even AE/MA)
+ * 3) Blocked countries → block
+ * 4) Allowed countries (AE, MA) → allow
+ * 5) Unknown country → allow (fail-open)
+ * 6) Any other known country → block
  */
 
 /**
@@ -87,6 +88,9 @@ export async function applyRules(context) {
   const allowedCountries = normalizeCountryList(rulesConfig.allowedCountries);
   const blockUnknownCountry = Boolean(rulesConfig.blockUnknownCountry);
 
+  const info =
+    context.ipResult && context.ipResult.info ? context.ipResult.info : null;
+
   // -------------------------------------------------------------------------
   // RULE: Google bot bypass (also short-circuited in middleware)
   // -------------------------------------------------------------------------
@@ -98,6 +102,20 @@ export async function applyRules(context) {
       reason: "google_bot_bypass",
       country,
       blockType: null
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // RULE: strict proxy block (applies even inside AE/MA)
+  // -------------------------------------------------------------------------
+  if (rulesConfig.blockProxy && info && info.is_proxy === true) {
+    return {
+      decision: "block",
+      allow: false,
+      matchedRules: ["blocked_proxy"],
+      reason: "blocked_proxy",
+      country,
+      blockType: "proxy"
     };
   }
 
