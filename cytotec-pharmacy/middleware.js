@@ -1,10 +1,10 @@
 /**
- * Edge security middleware — Strict Security Gate v1
- * --------------------------------------------------
- * Inspect HTML/document visitors via IPinfo, enforce anonymity/hosting
- * blocks, keep geo allowlist, fail-open on errors, never expose token.
+ * Edge security middleware — strict IP protection (dr-ohood.clinic)
+ * ----------------------------------------------------------------
+ * IPinfo Privacy Detection → block vpn/proxy/tor/relay/hosting +
+ * datacenter ASN/company keywords. Fail-open on errors. Never 500.
  *
- * Static assets and Next internals are excluded from the matcher.
+ * Excludes: /_next/*, assets, images, css, js, fonts, favicon, robots, sitemap
  */
 
 import { NextResponse } from "next/server";
@@ -32,7 +32,7 @@ function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
   /** @type {Record<string, string>} */
   const headers = {
-    "x-security-engine": meta.engineVersion || "1.6.0-hard-ip-denylist",
+    "x-security-engine": meta.engineVersion || "1.7.0-privacy-api",
     "x-security-decision": "allow"
   };
   if (meta.requestId) headers["x-request-id"] = meta.requestId;
@@ -164,7 +164,7 @@ export async function middleware(request) {
     return serveLanding(request, {
       requestId,
       reason: "fail_open",
-      engineVersion: "1.6.0-hard-ip-denylist"
+      engineVersion: "1.7.0-privacy-api"
     });
   }
 }

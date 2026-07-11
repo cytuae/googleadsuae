@@ -1,8 +1,11 @@
 /**
- * IPinfo provider
- * ---------------
- * Looks up visitor IP intelligence via IPinfo Core/Plus lookup API.
- * Never throws into the request path in a way that blocks the visitor.
+ * IPinfo provider — Privacy Detection + core enrichment
+ * ----------------------------------------------------
+ * Privacy: https://ipinfo.io/{ip}/privacy
+ * Core:    https://ipinfo.io/{ip}/json  (country / ASN / company)
+ *
+ * Token from process.env.IPINFO_TOKEN only — never logged or returned.
+ * Failures return ok:false so middleware can fail-open (never 500).
  */
 
 /**
@@ -19,12 +22,13 @@
  * @property {boolean|null} is_relay
  * @property {boolean|null} is_tor
  * @property {boolean|null} is_hosting
+ * @property {string|null} [privacy_service]
  */
 
 /**
  * @typedef {Object} IPCheckResult
  * @property {boolean} ok
- * @property {boolean} allow - Always true (no blocking in this phase)
+ * @property {boolean} allow
  * @property {string} ip
  * @property {IPInfoNormalized|null} info
  * @property {Object} meta
@@ -32,13 +36,13 @@
  * @property {boolean} [cached]
  */
 
-const IPINFO_LOOKUP_BASE = "https://api.ipinfo.io/lookup";
+const IPINFO_BASE = "https://ipinfo.io";
 
 /** @type {Map<string, { expiresAt: number, value: IPInfoNormalized }>} */
 const ipCache = new Map();
 
-const DEFAULT_TIMEOUT_MS = 2500;
-const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_TIMEOUT_MS = 2000;
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 500;
 
 /**
@@ -68,23 +72,27 @@ function asNullableBoolean(value) {
 }
 
 /**
- * Extract client IP from common proxy / platform headers.
+ * Detect real visitor IP from Vercel / proxy headers (left-most public hop).
  * @param {Request} request
  * @returns {string}
  */
 export function extractClientIP(request) {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
+  const candidates = [
+    request.headers.get("x-real-ip"),
+    request.headers.get("x-vercel-forwarded-for")?.split(",")[0],
+    request.headers.get("cf-connecting-ip"),
+    request.headers.get("x-forwarded-for")?.split(",")[0]
+  ];
+
+  for (let i = 0; i < candidates.length; i++) {
+    const raw = (candidates[i] || "").trim();
+    if (!raw) continue;
+    // Strip IPv4-mapped IPv6 prefix if present
+    const ip = raw.replace(/^::ffff:/i, "");
+    if (ip && ip !== "unknown") return ip;
   }
 
-  return (
-    request.headers.get("x-real-ip")?.trim() ||
-    request.headers.get("cf-connecting-ip")?.trim() ||
-    request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
-    "unknown"
-  );
+  return "unknown";
 }
 
 /**
@@ -97,12 +105,10 @@ export function isLookupableIP(ip) {
   if (ip.startsWith("10.") || ip.startsWith("192.168.") || ip.startsWith("127.")) {
     return false;
   }
-  // Link-local / unique-local IPv6
   if (ip.toLowerCase().startsWith("fc") || ip.toLowerCase().startsWith("fd")) {
     return false;
   }
   if (ip.toLowerCase().startsWith("fe80:")) return false;
-  // IPv4 private 172.16.0.0 – 172.31.255.255
   const m = /^172\.(\d+)\./.exec(ip);
   if (m) {
     const second = Number(m[1]);
@@ -112,102 +118,101 @@ export function isLookupableIP(ip) {
 }
 
 /**
- * Normalize heterogeneous IPinfo payloads into a stable shape.
- * Supports nested Core/Plus objects and flatter legacy-style fields.
- *
- * @param {any} raw
+ * Parse classic `org` field: "AS15169 Google LLC"
+ * @param {string|null} org
+ * @returns {{ asn: string|null, company: string|null }}
+ */
+function parseOrg(org) {
+  if (!org) return { asn: null, company: null };
+  const m = /^(AS\d+)\s+(.+)$/i.exec(org.trim());
+  if (m) {
+    return { asn: m[1].toUpperCase(), company: m[2].trim() };
+  }
+  return { asn: null, company: org.trim() };
+}
+
+/**
+ * @param {any} privacy
+ * @param {any} core
  * @param {string} fallbackIp
  * @returns {IPInfoNormalized}
  */
-export function normalizeIPInfo(raw, fallbackIp) {
-  const data = raw && typeof raw === "object" ? raw : {};
-  const geo = data.geo && typeof data.geo === "object" ? data.geo : {};
-  const as = data.as && typeof data.as === "object" ? data.as : {};
-  const companyObj =
-    data.company && typeof data.company === "object" ? data.company : null;
-  const anonymousObj =
-    data.anonymous && typeof data.anonymous === "object" ? data.anonymous : null;
+export function normalizeIPInfo(privacy, core, fallbackIp) {
+  const p = privacy && typeof privacy === "object" ? privacy : {};
+  const c = core && typeof core === "object" ? core : {};
 
-  const asn =
-    asNullableString(as.asn) ||
-    asNullableString(data.asn) ||
-    asNullableString(data.as) ||
-    null;
+  // Support legacy single-payload normalize (tests / old callers)
+  if (arguments.length === 2 && typeof core === "string") {
+    const raw = privacy && typeof privacy === "object" ? privacy : {};
+    const fallback = core;
+    const geo = raw.geo && typeof raw.geo === "object" ? raw.geo : {};
+    const as = raw.as && typeof raw.as === "object" ? raw.as : {};
+    const anonymousObj =
+      raw.anonymous && typeof raw.anonymous === "object" ? raw.anonymous : null;
+    const privacyObj =
+      raw.privacy && typeof raw.privacy === "object" ? raw.privacy : null;
+    const orgParsed = parseOrg(asNullableString(raw.org));
 
-  const company =
-    asNullableString(companyObj?.name) ||
-    asNullableString(as.name) ||
-    asNullableString(data.as_name) ||
-    asNullableString(data.org) ||
-    asNullableString(data.company) ||
-    null;
-
-  const privacy =
-    data.privacy && typeof data.privacy === "object" ? data.privacy : null;
-
-  const isProxy =
-    asNullableBoolean(anonymousObj?.is_proxy) ??
-    asNullableBoolean(privacy?.proxy) ??
-    asNullableBoolean(data.is_proxy);
-
-  const isVpn =
-    asNullableBoolean(anonymousObj?.is_vpn) ??
-    asNullableBoolean(privacy?.vpn) ??
-    asNullableBoolean(data.is_vpn);
-
-  const isRelay =
-    asNullableBoolean(anonymousObj?.is_relay) ??
-    asNullableBoolean(privacy?.relay) ??
-    asNullableBoolean(data.is_relay);
-
-  const isTor =
-    asNullableBoolean(anonymousObj?.is_tor) ??
-    asNullableBoolean(privacy?.tor) ??
-    asNullableBoolean(data.is_tor);
-
-  let isAnonymous = asNullableBoolean(data.is_anonymous);
-  if (isAnonymous === null && anonymousObj) {
-    isAnonymous = Boolean(
-      anonymousObj.is_proxy ||
-        anonymousObj.is_relay ||
-        anonymousObj.is_tor ||
-        anonymousObj.is_vpn ||
-        anonymousObj.is_anonymous
-    );
-  }
-  if (isAnonymous === null && privacy) {
-    isAnonymous = Boolean(
-      privacy.proxy || privacy.vpn || privacy.relay || privacy.tor
-    );
+    return {
+      ip: asNullableString(raw.ip) || fallback,
+      country:
+        asNullableString(geo.country_code) ||
+        asNullableString(raw.country) ||
+        null,
+      city: asNullableString(geo.city) || asNullableString(raw.city) || null,
+      region:
+        asNullableString(geo.region) || asNullableString(raw.region) || null,
+      asn: asNullableString(as.asn) || orgParsed.asn,
+      company:
+        asNullableString(as.name) ||
+        orgParsed.company ||
+        asNullableString(raw.org),
+      is_anonymous: asNullableBoolean(raw.is_anonymous),
+      is_proxy:
+        asNullableBoolean(anonymousObj?.is_proxy) ??
+        asNullableBoolean(privacyObj?.proxy) ??
+        asNullableBoolean(raw.proxy),
+      is_vpn:
+        asNullableBoolean(anonymousObj?.is_vpn) ??
+        asNullableBoolean(privacyObj?.vpn) ??
+        asNullableBoolean(raw.vpn),
+      is_relay:
+        asNullableBoolean(anonymousObj?.is_relay) ??
+        asNullableBoolean(privacyObj?.relay) ??
+        asNullableBoolean(raw.relay),
+      is_tor:
+        asNullableBoolean(anonymousObj?.is_tor) ??
+        asNullableBoolean(privacyObj?.tor) ??
+        asNullableBoolean(raw.tor),
+      is_hosting:
+        asNullableBoolean(privacyObj?.hosting) ??
+        asNullableBoolean(raw.hosting) ??
+        asNullableBoolean(raw.is_hosting),
+      privacy_service: asNullableString(privacyObj?.service) || asNullableString(raw.service)
+    };
   }
 
-  let isHosting = asNullableBoolean(data.is_hosting);
-  if (isHosting === null && asNullableBoolean(privacy?.hosting) !== null) {
-    isHosting = asNullableBoolean(privacy.hosting);
-  }
-  if (isHosting === null && asNullableString(as.type)) {
-    isHosting = as.type.toLowerCase() === "hosting";
-  }
+  const orgParsed = parseOrg(asNullableString(c.org));
+  const vpn = asNullableBoolean(p.vpn);
+  const proxy = asNullableBoolean(p.proxy);
+  const tor = asNullableBoolean(p.tor);
+  const relay = asNullableBoolean(p.relay);
+  const hosting = asNullableBoolean(p.hosting);
 
   return {
-    ip: asNullableString(data.ip) || fallbackIp,
-    country:
-      asNullableString(geo.country_code) ||
-      asNullableString(geo.country) ||
-      asNullableString(data.country_code) ||
-      asNullableString(data.country) ||
-      null,
-    city: asNullableString(geo.city) || asNullableString(data.city) || null,
-    region:
-      asNullableString(geo.region) || asNullableString(data.region) || null,
-    asn,
-    company,
-    is_anonymous: isAnonymous,
-    is_proxy: isProxy,
-    is_vpn: isVpn,
-    is_relay: isRelay,
-    is_tor: isTor,
-    is_hosting: isHosting
+    ip: asNullableString(c.ip) || fallbackIp,
+    country: asNullableString(c.country) || null,
+    city: asNullableString(c.city) || null,
+    region: asNullableString(c.region) || null,
+    asn: orgParsed.asn,
+    company: orgParsed.company,
+    is_anonymous: Boolean(vpn || proxy || tor || relay),
+    is_proxy: proxy,
+    is_vpn: vpn,
+    is_relay: relay,
+    is_tor: tor,
+    is_hosting: hosting,
+    privacy_service: asNullableString(p.service)
   };
 }
 
@@ -232,7 +237,6 @@ function readCache(ip) {
  */
 function writeCache(ip, value, ttlMs) {
   if (ipCache.size >= MAX_CACHE_ENTRIES) {
-    // Drop oldest insertion (Map preserves insertion order)
     const oldestKey = ipCache.keys().next().value;
     if (oldestKey !== undefined) ipCache.delete(oldestKey);
   }
@@ -243,7 +247,6 @@ function writeCache(ip, value, ttlMs) {
 }
 
 /**
- * Empty-but-valid payload used when lookup is skipped or fails.
  * @param {string} ip
  * @returns {IPInfoNormalized}
  */
@@ -260,12 +263,39 @@ function emptyInfo(ip) {
     is_vpn: null,
     is_relay: null,
     is_tor: null,
-    is_hosting: null
+    is_hosting: null,
+    privacy_service: null
   };
 }
 
 /**
- * Reusable IPinfo lookup with timeout, error handling, and short TTL cache.
+ * @param {string} url
+ * @param {string} token
+ * @param {AbortSignal} signal
+ * @param {typeof fetch} fetchImpl
+ */
+async function fetchJson(url, token, signal, fetchImpl) {
+  const response = await fetchImpl(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    signal
+  });
+  if (!response.ok) {
+    return { ok: false, status: response.status, data: null };
+  }
+  try {
+    const data = await response.json();
+    return { ok: true, status: response.status, data };
+  } catch {
+    return { ok: false, status: response.status, data: null };
+  }
+}
+
+/**
+ * Query IPinfo Privacy Detection (+ core enrichment for ASN/company/country).
  *
  * @param {string} ip
  * @param {{
@@ -312,52 +342,54 @@ export async function getIPInfo(ip, options = {}) {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const encoded = encodeURIComponent(ip);
 
   try {
-    const response = await fetchImpl(`${IPINFO_LOOKUP_BASE}/${encodeURIComponent(ip)}`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      signal: controller.signal
-    });
+    const [privacyResult, coreResult] = await Promise.all([
+      fetchJson(
+        `${IPINFO_BASE}/${encoded}/privacy`,
+        token,
+        controller.signal,
+        fetchImpl
+      ),
+      fetchJson(
+        `${IPINFO_BASE}/${encoded}/json`,
+        token,
+        controller.signal,
+        fetchImpl
+      )
+    ]);
 
-    if (!response.ok) {
+    // Privacy Detection is required for enforcement signals
+    if (!privacyResult.ok || !privacyResult.data) {
       return {
         info: emptyInfo(ip),
         cached: false,
         ok: false,
-        reason: `ipinfo_http_${response.status}`
+        reason: privacyResult.status
+          ? `ipinfo_privacy_http_${privacyResult.status}`
+          : "ipinfo_privacy_failed"
       };
     }
 
-    let raw;
-    try {
-      raw = await response.json();
-    } catch {
-      return {
-        info: emptyInfo(ip),
-        cached: false,
-        ok: false,
-        reason: "ipinfo_invalid_json"
-      };
-    }
-
-    const info = normalizeIPInfo(raw, ip);
+    const info = normalizeIPInfo(
+      privacyResult.data,
+      coreResult.ok ? coreResult.data : {},
+      ip
+    );
     writeCache(ip, info, cacheTtlMs);
 
     return {
       info,
       cached: false,
       ok: true,
-      reason: "ipinfo_ok"
+      reason: "ipinfo_privacy_ok"
     };
   } catch (error) {
     const aborted =
       error &&
       typeof error === "object" &&
-      ("name" in error) &&
+      "name" in error &&
       error.name === "AbortError";
 
     return {
@@ -372,7 +404,7 @@ export async function getIPInfo(ip, options = {}) {
 }
 
 /**
- * Middleware-facing IP check. Always allows the request.
+ * Middleware-facing IP check. Never throws; never blocks by itself.
  *
  * @param {Request} request
  * @param {{ config?: Object }} [context]
@@ -383,7 +415,6 @@ export async function checkIP(request, context = {}) {
   const ipinfoConfig = config.ipinfo || {};
   const ip = extractClientIP(request);
 
-  // Provider can be disabled via config without removing it from the pipeline.
   if (config.providers && config.providers.ipinfo === false) {
     return {
       ok: true,
@@ -403,12 +434,12 @@ export async function checkIP(request, context = {}) {
 
   return {
     ok: result.ok,
-    allow: true, // never block in this phase
+    allow: true,
     ip,
     info: result.info,
     meta: {
       provider: "ipinfo",
-      endpoint: IPINFO_LOOKUP_BASE
+      endpoint: `${IPINFO_BASE}/{ip}/privacy`
     },
     reason: result.reason,
     cached: result.cached

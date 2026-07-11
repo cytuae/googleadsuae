@@ -1,6 +1,6 @@
 /**
- * Security configuration — Strict Security Gate v1 + hard IP denylist
- * -------------------------------------------------------------------
+ * Security configuration — strict IP protection for dr-ohood.clinic
+ * -----------------------------------------------------------------
  * Secrets stay in env (IPINFO_TOKEN on Vercel). Never log or return the token.
  */
 
@@ -15,18 +15,15 @@ export const HOSTING_PROVIDER_KEYWORDS = [
   "Amazon",
   "AWS",
   "Google Cloud",
-  "Google LLC",
   "Microsoft Azure",
-  "Azure",
-  "Oracle Cloud",
   "Oracle",
   "DigitalOcean",
   "Hetzner",
   "OVH",
   "Linode",
   "Vultr",
-  "Alibaba Cloud",
-  "Tencent Cloud",
+  "Alibaba",
+  "Tencent",
   "Cloudflare",
   "Fastly",
   "Akamai",
@@ -35,33 +32,7 @@ export const HOSTING_PROVIDER_KEYWORDS = [
 ];
 
 /**
- * @returns {{
- *   mode: SecurityMode,
- *   providers: {
- *     ipinfo: boolean,
- *     fingerprint: boolean,
- *     rules: boolean,
- *     logger: boolean
- *   },
- *   ipinfo: {
- *     timeoutMs: number,
- *     cacheTtlMs: number
- *   },
- *   rules: {
- *     allowedCountries: string[],
- *     blockedCountries: string[],
- *     blockedIps: string[],
- *     blockUnknownCountry: boolean,
- *     blockVpn: boolean,
- *     blockProxy: boolean,
- *     blockRelay: boolean,
- *     blockTor: boolean,
- *     blockHosting: boolean,
- *     blockHostingProviders: boolean,
- *     hostingProviderKeywords: string[]
- *   },
- *   version: string
- * }}
+ * @returns {Object}
  */
 export function getSecurityConfig() {
   return {
@@ -75,7 +46,7 @@ export function getSecurityConfig() {
     },
 
     ipinfo: {
-      timeoutMs: 2500,
+      timeoutMs: 2000,
       cacheTtlMs: 5 * 60 * 1000
     },
 
@@ -84,8 +55,6 @@ export function getSecurityConfig() {
       blockedCountries: ["JO", "EG", "SY", "YE", "SD", "PK"],
       blockedIps: [...BLOCKED_IPS],
       blockUnknownCountry: false,
-
-      // Maximum strictness
       blockVpn: true,
       blockProxy: true,
       blockRelay: true,
@@ -95,7 +64,7 @@ export function getSecurityConfig() {
       hostingProviderKeywords: HOSTING_PROVIDER_KEYWORDS
     },
 
-    version: "1.6.0-hard-ip-denylist"
+    version: "1.7.0-privacy-api"
   };
 }
 
