@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Landing page is /public/index.html (linked from app/page.js).
-  // Security middleware is fully removed until Edge-safe again.
+  // Static landing lives in /public/index.html
+  // Middleware rewrites / → /index.html after security checks.
 };
 
 module.exports = nextConfig;

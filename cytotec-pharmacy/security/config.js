@@ -1,11 +1,8 @@
 /**
  * Security configuration
  * ----------------------
- * Central place for feature flags, provider toggles, and shared constants.
- * Keep secrets out of this file — use environment variables at runtime.
- *
- * Required env:
- *   IPINFO_TOKEN — IPinfo API bearer token
+ * Phase 1: country allow/block + Google bot bypass.
+ * Secrets stay in env (IPINFO_TOKEN on Vercel).
  */
 
 /** @typedef {'off' | 'monitor' | 'enforce'} SecurityMode */
@@ -24,7 +21,9 @@
  *     cacheTtlMs: number
  *   },
  *   rules: {
+ *     allowedCountries: string[],
  *     blockedCountries: string[],
+ *     blockUnknownCountry: boolean,
  *     blockVpn: boolean,
  *     blockProxy: boolean,
  *     blockRelay: boolean,
@@ -35,7 +34,6 @@
  */
 export function getSecurityConfig() {
   return {
-    // enforce = honor block decisions from applyRules()
     mode: "enforce",
 
     providers: {
@@ -51,16 +49,20 @@ export function getSecurityConfig() {
     },
 
     rules: {
-      // ISO 3166-1 alpha-2
-      blockedCountries: ["JO"],
-      // Disabled for now — do not evaluate these signals
+      // Audience: UAE + Morocco
+      allowedCountries: ["AE", "MA"],
+      // Click-fraud sources (phase 1)
+      blockedCountries: ["JO", "EG", "SY", "YE", "SD", "PK"],
+      // If IPinfo has no country → allow (fail-open)
+      blockUnknownCountry: false,
+      // Phase 2 — not evaluated yet
       blockVpn: false,
       blockProxy: false,
       blockRelay: false,
       blockHosting: false
     },
 
-    version: "1.2.0-country-block"
+    version: "1.3.0-phase1-geo"
   };
 }
 

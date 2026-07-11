@@ -1,0 +1,140 @@
+/**
+ * Edge security middleware — Phase 1
+ * ----------------------------------
+ * - Google Ads/Search bots: always allow (no IPinfo, no geo block)
+ * - Country allowlist: AE, MA
+ * - Country blocklist: JO, EG, SY, YE, SD, PK
+ * - Any failure: fail-open (serve the page)
+ *
+ * Matcher limited to HTML entry points to keep assets fast and cheap.
+ */
+
+import { NextResponse } from "next/server";
+import { getSecurityConfig, isEnforcementEnabled } from "./security/config";
+import { checkIP, extractClientIP } from "./security/ipinfo";
+import { applyRules } from "./security/rules";
+import { logVisit } from "./security/logger";
+import { createForbiddenResponse } from "./security/responses";
+import { isGoogleAdsOrSearchBot } from "./security/bots";
+
+export const config = {
+  matcher: ["/", "/index.html"]
+};
+
+/**
+ * @param {import('next/server').NextRequest} request
+ * @returns {import('next/server').NextResponse}
+ */
+function serveLanding(request) {
+  const url = request.nextUrl.clone();
+  if (url.pathname === "/" || url.pathname === "") {
+    url.pathname = "/index.html";
+    return NextResponse.rewrite(url);
+  }
+  return NextResponse.next();
+}
+
+/**
+ * @returns {string}
+ */
+function createRequestId() {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // ignore
+  }
+  return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * @param {import('next/server').NextRequest} request
+ */
+export async function middleware(request) {
+  const requestId = createRequestId();
+
+  try {
+    // ------------------------------------------------------------------
+    // ALWAYS allow Google Ads / Search crawlers — before any geo lookup
+    // ------------------------------------------------------------------
+    if (isGoogleAdsOrSearchBot(request)) {
+      try {
+        await logVisit(
+          {
+            timestamp: new Date().toISOString(),
+            method: request.method,
+            path: request.nextUrl.pathname,
+            ip: extractClientIP(request),
+            requestId,
+            rulesResult: {
+              decision: "allow",
+              allow: true,
+              matchedRules: ["google_bot_bypass"],
+              reason: "google_bot_bypass",
+              country: null,
+              blockType: null
+            }
+          },
+          {}
+        );
+      } catch {
+        // never fail the request for logging
+      }
+      return serveLanding(request);
+    }
+
+    const securityConfig = getSecurityConfig();
+
+    if (securityConfig.mode === "off" || !securityConfig.providers.rules) {
+      return serveLanding(request);
+    }
+
+    const ipResult = await checkIP(request, { config: securityConfig });
+
+    const rulesResult = await applyRules({
+      request,
+      config: securityConfig,
+      ipResult,
+      isGoogleBot: false
+    });
+
+    try {
+      await logVisit(
+        {
+          timestamp: new Date().toISOString(),
+          method: request.method,
+          path: request.nextUrl.pathname,
+          ip: ipResult.ip,
+          ipResult,
+          rulesResult,
+          requestId
+        },
+        { config: securityConfig }
+      );
+    } catch {
+      // ignore log errors
+    }
+
+    if (
+      isEnforcementEnabled(securityConfig) &&
+      rulesResult.decision === "block"
+    ) {
+      return createForbiddenResponse({
+        requestId,
+        engineVersion: securityConfig.version,
+        blockType: rulesResult.blockType || "country",
+        country: rulesResult.country
+      });
+    }
+
+    return serveLanding(request);
+  } catch (error) {
+    // Fail-open: never take the site down with MIDDLEWARE_INVOCATION_FAILED
+    console.error("[security:error]", {
+      requestId,
+      message: error && error.message ? error.message : String(error)
+    });
+    return serveLanding(request);
+  }
+}

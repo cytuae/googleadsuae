@@ -1,9 +1,9 @@
-import { permanentRedirect } from "next/navigation";
+import { redirect } from "next/navigation";
 
 /**
- * No Edge middleware — avoid MIDDLEWARE_INVOCATION_FAILED on Vercel.
- * Send visitors to the static landing page in /public/index.html
+ * Fallback when middleware does not rewrite.
+ * Primary path: middleware serves /public/index.html
  */
 export default function Page() {
-  permanentRedirect("/index.html");
+  redirect("/index.html");
 }

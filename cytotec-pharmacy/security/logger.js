@@ -1,23 +1,11 @@
 /**
  * Security visit logger
  * ---------------------
- * Emits structured security events (Vercel / Edge console → production logs).
+ * Structured events for Vercel Edge / production logs.
  */
 
 /**
- * @typedef {Object} VisitLogPayload
- * @property {string} timestamp
- * @property {string} method
- * @property {string} path
- * @property {string} [ip]
- * @property {Object} [ipResult]
- * @property {Object} [fingerprintResult]
- * @property {Object} [rulesResult]
- * @property {string} [requestId]
- */
-
-/**
- * @param {VisitLogPayload} payload
+ * @param {Object} payload
  * @param {{ config?: Object }} [context]
  * @returns {Promise<void>}
  */
@@ -29,33 +17,26 @@ export async function logVisit(payload, context = {}) {
   }
 
   const rules = payload.rulesResult || {};
-  const info = payload.ipResult && payload.ipResult.info ? payload.ipResult.info : {};
+  const info =
+    payload.ipResult && payload.ipResult.info ? payload.ipResult.info : {};
 
-  const event = {
-    type: "security_visit",
-    timestamp: payload.timestamp,
-    requestId: payload.requestId,
-    method: payload.method,
-    path: payload.path,
-    ip: payload.ip,
-    decision: rules.decision || "allow",
-    reason: rules.reason || null,
-    country: rules.country || info.country || null,
-    matchedRules: rules.matchedRules || [],
-    blockType: rules.blockType || null
-  };
-
-  // Always log blocks; keep allow noise low unless needed later
-  if (rules.decision === "block" || rules.reason === "blocked_country") {
+  if (rules.decision === "block") {
     console.log("[security:block]", {
-      reason: "blocked_country",
-      country: event.country || "JO",
-      requestId: event.requestId,
-      ip: event.ip,
-      path: event.path
+      reason: rules.reason || "blocked",
+      country: rules.country || info.country || null,
+      requestId: payload.requestId,
+      ip: payload.ip,
+      path: payload.path,
+      matchedRules: rules.matchedRules || []
     });
     return;
   }
 
-  return;
+  if (rules.reason === "google_bot_bypass") {
+    console.log("[security:google-bot]", {
+      requestId: payload.requestId,
+      path: payload.path,
+      country: rules.country || null
+    });
+  }
 }

@@ -10,3 +10,4 @@ export { checkFingerprint } from "./fingerprint";
 export { applyRules, normalizeCountryCode } from "./rules";
 export { logVisit } from "./logger";
 export { createForbiddenResponse, forbiddenPageHtml } from "./responses";
+export { isGoogleAdsOrSearchBot } from "./bots";

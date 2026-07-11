@@ -1,13 +1,11 @@
 /**
- * Security rules engine
- * ---------------------
- * Combines provider results into allow | challenge | block decisions.
- *
- * Active rules:
- *   - Block ISO country JO (Jordan)
- *
- * Disabled for now:
- *   - VPN / Proxy / Relay / Hosting detection
+ * Security rules engine — Phase 1
+ * -------------------------------
+ * 1) Google bots are handled in middleware (never reach a block here if flagged).
+ * 2) Blocked countries → block
+ * 3) Allowed countries (AE, MA) → allow
+ * 4) Unknown country → allow (fail-open)
+ * 5) Any other known country → block
  */
 
 /**
@@ -23,11 +21,18 @@
  */
 
 const COUNTRY_NAME_TO_CODE = {
-  JORDAN: "JO"
+  JORDAN: "JO",
+  EGYPT: "EG",
+  SYRIA: "SY",
+  YEMEN: "YE",
+  SUDAN: "SD",
+  PAKISTAN: "PK",
+  "UNITED ARAB EMIRATES": "AE",
+  UAE: "AE",
+  MOROCCO: "MA"
 };
 
 /**
- * Normalize IPinfo country field to ISO 3166-1 alpha-2 when possible.
  * @param {unknown} value
  * @returns {string|null}
  */
@@ -53,27 +58,51 @@ function resolveVisitorCountry(ipResult) {
 }
 
 /**
- * Apply security rules to aggregated provider results.
- *
+ * @param {string[]} list
+ * @returns {string[]}
+ */
+function normalizeCountryList(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((c) => String(c).toUpperCase())
+    .filter((c) => /^[A-Z]{2}$/.test(c));
+}
+
+/**
  * @param {{
  *   request: Request,
  *   config?: Object,
  *   ipResult?: Object,
- *   fingerprintResult?: Object
+ *   fingerprintResult?: Object,
+ *   isGoogleBot?: boolean
  * }} context
  * @returns {Promise<RulesResult>}
  */
 export async function applyRules(context) {
   const config = context.config || {};
   const rulesConfig = config.rules || {};
-  const blockedCountries = Array.isArray(rulesConfig.blockedCountries)
-    ? rulesConfig.blockedCountries.map((c) => String(c).toUpperCase())
-    : [];
-
   const country = resolveVisitorCountry(context.ipResult);
 
+  const blockedCountries = normalizeCountryList(rulesConfig.blockedCountries);
+  const allowedCountries = normalizeCountryList(rulesConfig.allowedCountries);
+  const blockUnknownCountry = Boolean(rulesConfig.blockUnknownCountry);
+
   // -------------------------------------------------------------------------
-  // RULE: blocked country (JO)
+  // RULE: Google bot bypass (also short-circuited in middleware)
+  // -------------------------------------------------------------------------
+  if (context.isGoogleBot) {
+    return {
+      decision: "allow",
+      allow: true,
+      matchedRules: ["google_bot_bypass"],
+      reason: "google_bot_bypass",
+      country,
+      blockType: null
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // RULE: explicit blocked countries
   // -------------------------------------------------------------------------
   if (country && blockedCountries.includes(country)) {
     return {
@@ -86,15 +115,54 @@ export async function applyRules(context) {
     };
   }
 
-  // VPN / Proxy / Relay / Hosting — intentionally not evaluated yet
-  // (rulesConfig.blockVpn | blockProxy | blockRelay | blockHosting remain false)
+  // -------------------------------------------------------------------------
+  // RULE: unknown country → fail-open (unless explicitly configured otherwise)
+  // -------------------------------------------------------------------------
+  if (!country) {
+    if (blockUnknownCountry) {
+      return {
+        decision: "block",
+        allow: false,
+        matchedRules: ["unknown_country"],
+        reason: "unknown_country",
+        country: null,
+        blockType: "country"
+      };
+    }
 
+    return {
+      decision: "allow",
+      allow: true,
+      matchedRules: ["unknown_country_fail_open"],
+      reason: "unknown_country_fail_open",
+      country: null,
+      blockType: null
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // RULE: allowlist (AE, MA)
+  // -------------------------------------------------------------------------
+  if (allowedCountries.includes(country)) {
+    return {
+      decision: "allow",
+      allow: true,
+      matchedRules: ["allowed_country"],
+      reason: "allowed_country",
+      country,
+      blockType: null
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // RULE: known country outside allowlist
+  // -------------------------------------------------------------------------
   return {
-    decision: "allow",
-    allow: true,
-    matchedRules: [],
-    reason: "default_allow",
+    decision: "block",
+    allow: false,
+    matchedRules: ["country_not_allowed"],
+    reason: "country_not_allowed",
     country,
-    blockType: null
+    blockType: "country"
   };
 }
