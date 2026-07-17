@@ -28,6 +28,12 @@ import { logVisit } from "./security/logger";
 import { createForbiddenResponse } from "./security/responses";
 import { isTrustedSecurityBypassBot } from "./security/bots";
 import { evaluateFingerprintCookies } from "./security/fingerprint";
+import {
+  extractAttribution,
+  hasAdClickId,
+  primaryClickId
+} from "./security/attribution";
+import { sendCircuitSignal } from "./security/circuit-signal";
 
 export const config = {
   matcher: [
@@ -49,6 +55,7 @@ function isSecurityBypassPath(request) {
     path === "/api/security/fingerprint" ||
     path.startsWith("/api/security/fingerprint/") ||
     path === "/api/security/ingest-event" ||
+    path === "/api/security/circuit" ||
     path.startsWith("/api/admin/") ||
     path === "/admin" ||
     path.startsWith("/admin/") ||
@@ -98,10 +105,30 @@ function createRequestId() {
 }
 
 /**
- * @param {import('next/server').NextRequest} request
+ * Run monitoring after the response without holding the 403 open. Falls back
+ * to a detached promise outside runtimes that expose NextFetchEvent.waitUntil.
+ * @param {import('next/server').NextFetchEvent|undefined} event
+ * @param {Promise<void>} promise
  */
-export async function middleware(request) {
+function keepAlive(event, promise) {
+  try {
+    if (event && typeof event.waitUntil === "function") {
+      event.waitUntil(promise);
+      return;
+    }
+  } catch {
+    // fall through
+  }
+  void promise.catch(() => {});
+}
+
+/**
+ * @param {import('next/server').NextRequest} request
+ * @param {import('next/server').NextFetchEvent} event
+ */
+export async function middleware(request, event) {
   const requestId = createRequestId();
+  const attribution = extractAttribution(request);
 
   try {
     // Fingerprint API, ingest, admin, access-denied — no public gate / no loops
@@ -119,6 +146,7 @@ export async function middleware(request) {
             path: request.nextUrl.pathname,
             ip: extractClientIP(request),
             requestId,
+            attribution,
             rulesResult: {
               decision: "allow",
               allow: true,
@@ -162,6 +190,7 @@ export async function middleware(request) {
               path: request.nextUrl.pathname,
               ip: extractClientIP(request),
               requestId,
+              attribution,
               rulesResult: {
                 decision: "block",
                 allow: false,
@@ -176,6 +205,21 @@ export async function middleware(request) {
           );
         } catch {
           // ignore
+        }
+
+        if (hasAdClickId(attribution)) {
+          keepAlive(
+            event,
+            sendCircuitSignal({
+              requestId,
+              ip: extractClientIP(request),
+              asn: null,
+              country: null,
+              reason: "device_fingerprint_blacklist",
+              path: request.nextUrl.pathname,
+              clickId: primaryClickId(attribution)
+            })
+          );
         }
 
         return createForbiddenResponse({
@@ -206,7 +250,8 @@ export async function middleware(request) {
           ip: ipResult.ip,
           ipResult,
           rulesResult,
-          requestId
+          requestId,
+          attribution
         },
         { config: securityConfig }
       );
@@ -218,6 +263,22 @@ export async function middleware(request) {
       isEnforcementEnabled(securityConfig) &&
       rulesResult.decision === "block"
     ) {
+      if (hasAdClickId(attribution)) {
+        keepAlive(
+          event,
+          sendCircuitSignal({
+            requestId,
+            ip: ipResult.ip,
+            asn: ipResult.info && ipResult.info.asn,
+            country:
+              rulesResult.country || (ipResult.info && ipResult.info.country),
+            reason: rulesResult.reason,
+            path: request.nextUrl.pathname,
+            clickId: primaryClickId(attribution)
+          })
+        );
+      }
+
       return createForbiddenResponse({
         requestId,
         engineVersion: securityConfig.version,
