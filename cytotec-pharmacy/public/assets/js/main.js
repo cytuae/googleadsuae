@@ -53,10 +53,10 @@
     }
   }
 
-  // Wire all WhatsApp CTAs from one config
+  // Wire all WhatsApp CTAs — same message everywhere
   document.querySelectorAll("[data-cta='whatsapp']").forEach(function (el) {
-    var custom = el.getAttribute("data-wa-text");
-    el.setAttribute("href", waUrl(custom || SITE.waDefaultText));
+    el.removeAttribute("data-wa-text");
+    el.setAttribute("href", waUrl(SITE.waDefaultText));
     el.setAttribute("target", "_blank");
     el.setAttribute("rel", "noopener noreferrer");
     el.addEventListener("click", function () {
