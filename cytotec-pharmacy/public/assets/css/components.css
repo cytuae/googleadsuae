@@ -144,7 +144,7 @@
 /* ========== Hero ========== */
 .hero {
   position: relative;
-  padding-block: 1.75rem 2rem;
+  padding-block: 1.5rem 1.35rem;
   overflow: hidden;
 }
 
@@ -170,7 +170,7 @@
 
 @media (min-width: 900px) {
   .hero {
-    padding-block: 3.5rem 4rem;
+    padding-block: 2.25rem 1.75rem;
   }
 
   .hero__grid {
@@ -644,7 +644,7 @@
 .benefits__featured {
   display: grid;
   gap: 0.75rem;
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.75rem;
 }
 
 @media (min-width: 640px) {
@@ -820,7 +820,7 @@
 .process__cta {
   display: flex;
   justify-content: center;
-  margin-top: 1.35rem;
+  margin-top: 1rem;
 }
 
 /* ========== Trust / Reviews ========== */
@@ -943,7 +943,7 @@
 .reviews__cta {
   display: flex;
   justify-content: center;
-  margin-top: 1.35rem;
+  margin-top: 1rem;
 }
 
 .reviews__cta .btn {
@@ -1046,12 +1046,12 @@
 
 /* ========== Final CTA ========== */
 .final-cta {
-  padding-block: 2rem;
+  padding-block: 1.35rem;
 }
 
 @media (min-width: 768px) {
   .final-cta {
-    padding-block: 3rem;
+    padding-block: 1.75rem;
   }
 }
 
@@ -1096,7 +1096,7 @@
 /* ========== Footer ========== */
 .footer {
   border-top: 1px solid var(--hairline-soft);
-  padding-block: 1.75rem 1.35rem;
+  padding-block: 1.25rem 1rem;
 }
 
 .footer__inner {

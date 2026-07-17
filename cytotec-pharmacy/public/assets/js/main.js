@@ -6,7 +6,7 @@
     whatsapp: "971547952044",
     domain: "https://dr-ohood.clinic",
     hours: "الرد خلال دقايق",
-    waDefaultText: "مرحبا دكتورة عهود، أرغب باستشارة مجانية"
+    waDefaultText: "مرحبا دكتورة عهود، ارغب بالحصول على سايتوتيك"
   };
 
   function waUrl(text) {
