@@ -45,7 +45,7 @@
 }
 
 .btn--secondary:hover {
-  border-color: #3d4454;
+  border-color: var(--accent-border);
   background: var(--surface-2);
 }
 
@@ -95,7 +95,7 @@
 }
 
 .header.is-scrolled {
-  background: rgba(12, 9, 11, 0.82);
+  background: rgba(255, 255, 255, 0.92);
   border-bottom-color: var(--hairline-soft);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -192,7 +192,7 @@
   padding: 0.4rem 0.85rem;
   font-size: 14px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-primary);
   background: var(--surface-2);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-full);
@@ -346,19 +346,22 @@
 
 .hero__badge {
   position: absolute;
-  inset-inline-start: 0.65rem;
+  left: 50%;
   bottom: 0.65rem;
-  display: flex;
+  transform: translateX(-50%);
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
   padding: 0.35rem 0.65rem;
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--text-primary);
-  background: rgba(12, 9, 11, 0.88);
+  background: rgba(255, 255, 255, 0.96);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
-  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(26, 18, 22, 0.08);
+  white-space: nowrap;
 }
 
 .hero__badge svg {
@@ -414,8 +417,11 @@
 
 .product-showcase__frame {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   width: 100%;
-  padding: 0.85rem 0.75rem 2.25rem;
+  padding: 0.85rem 0.75rem 1rem;
   background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface-1) 100%);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-xl);
@@ -431,21 +437,20 @@
 }
 
 .product-showcase__badge {
-  position: absolute;
-  left: 50%;
-  bottom: 0.75rem;
-  transform: translateX(-50%);
+  position: static;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
-  padding: 0.4rem 0.75rem;
+  margin-top: 1.15rem;
+  padding: 0.45rem 0.85rem;
   font-size: 12px;
   font-weight: 700;
   color: #1a0f14;
   background: var(--accent);
   border-radius: var(--radius-full);
   white-space: nowrap;
-  box-shadow: 0 6px 20px rgba(232, 160, 181, 0.35);
+  box-shadow: 0 6px 20px rgba(196, 107, 136, 0.28);
 }
 
 .product-showcase__badge svg {
@@ -497,7 +502,7 @@
 }
 
 .doctor-card__name {
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
   font-weight: 600;
   font-size: 1.2rem;
   margin-bottom: 0.25rem;
@@ -636,6 +641,20 @@
 }
 
 /* ========== Benefits ========== */
+.benefits__featured {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+@media (min-width: 640px) {
+  .benefits__featured {
+    grid-template-columns: 1.15fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+}
+
 .benefits__grid {
   display: grid;
   gap: 0.75rem;
@@ -655,6 +674,7 @@
 }
 
 .benefit-card {
+  position: relative;
   padding: 1.1rem;
   background: var(--surface-1);
   border: 1px solid var(--hairline);
@@ -666,9 +686,32 @@
 
 @media (hover: hover) {
   .benefit-card:hover {
-    border-color: #4a3d44;
+    border-color: var(--accent-border);
     transform: translateY(-2px);
   }
+}
+
+.benefit-card--highlight {
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--surface-1) 70%);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-soft);
+}
+
+.benefit-card--featured {
+  border-width: 2px;
+  border-color: var(--accent);
+  padding-top: 1.35rem;
+}
+
+.benefit-card__tag {
+  display: inline-block;
+  margin-bottom: 0.45rem;
+  padding: 0.2rem 0.65rem;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border-radius: var(--radius-full);
 }
 
 .benefit-card__icon {
@@ -683,14 +726,36 @@
   color: var(--accent);
 }
 
+.benefit-card--featured .benefit-card__icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  background: var(--accent);
+  color: #fff;
+}
+
 .benefit-card__icon svg {
   width: 1.2rem;
   height: 1.2rem;
 }
 
+.benefit-card--featured .benefit-card__icon svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
 .benefit-card h3 {
   margin-bottom: 0.35rem;
   text-align: center;
+}
+
+.benefit-card--featured h3 {
+  font-size: 1.2rem;
+  color: var(--accent-deep);
+}
+
+.benefit-card--featured p {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .benefit-card p {
@@ -758,53 +823,134 @@
   margin-top: 1.35rem;
 }
 
-/* ========== Trust ========== */
-.trust__grid {
+/* ========== Trust / Reviews ========== */
+.reviews__grid {
   display: grid;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
-@media (min-width: 768px) {
-  .trust__grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
+@media (min-width: 700px) {
+  .reviews__grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.15rem;
   }
 }
 
-.trust-card {
-  padding: 1.15rem;
+@media (min-width: 1024px) {
+  .reviews__grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  .review-card--featured {
+    grid-column: span 3;
+  }
+
+  .reviews__grid > .review-card:not(.review-card--featured) {
+    grid-column: span 3;
+  }
+
+  .reviews__grid > .review-card:nth-child(n + 4) {
+    grid-column: span 2;
+  }
+}
+
+.review-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.85rem;
   background: var(--surface-1);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-xl);
-  text-align: center;
+  text-align: start;
+  overflow: hidden;
 }
 
-.trust-card__icon {
-  display: grid;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  margin-inline: auto;
-  margin-bottom: 0.75rem;
-  border-radius: var(--radius-md);
-  background: var(--accent-soft);
+.review-card--featured {
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--surface-1) 40%);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-soft);
+}
+
+.review-card__shot {
+  margin: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--hairline-soft);
+  background: var(--surface-2);
+  aspect-ratio: 9 / 14;
+  max-height: 22rem;
+}
+
+.review-card--featured .review-card__shot {
+  max-height: 26rem;
+}
+
+.review-card__shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+.review-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.15rem 0.35rem 0.35rem;
+}
+
+.review-card__stars {
   color: var(--accent);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  line-height: 1;
 }
 
-.trust-card__icon svg {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-.trust-card h3 {
-  margin-bottom: 0.35rem;
-  text-align: center;
-}
-
-.trust-card p {
-  font-size: 17px;
-  line-height: 1.55;
+.review-card__text {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.7;
   color: var(--text-secondary);
+}
+
+.review-card--featured .review-card__text {
+  font-size: 17px;
+  color: var(--text-primary);
+}
+
+.review-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.2rem;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.review-card__meta strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.review-card__meta span::before {
+  content: "·";
+  margin-inline-end: 0.5rem;
+  color: var(--hairline);
+}
+
+.reviews__cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.35rem;
+}
+
+.reviews__cta .btn {
+  white-space: normal;
+  text-align: center;
+  max-width: 100%;
+  line-height: 1.35;
 }
 
 .disclaimer {
@@ -847,7 +993,7 @@
   text-align: start;
   font-weight: 600;
   font-size: 17px;
-  color: #ffffff;
+  color: var(--text-primary);
   min-height: 3rem;
   line-height: 1.4;
 }
@@ -860,7 +1006,7 @@
   flex-shrink: 0;
   border-radius: var(--radius-full);
   background: var(--surface-3);
-  color: #ffffff;
+  color: var(--text-primary);
   transition: transform var(--dur-base) var(--ease-out),
     background var(--dur-base) var(--ease-out);
 }
@@ -998,7 +1144,7 @@
   z-index: 90;
   padding: 0.65rem var(--gutter);
   padding-bottom: calc(0.65rem + env(safe-area-inset-bottom, 0px));
-  background: rgba(12, 9, 11, 0.92);
+  background: rgba(255, 255, 255, 0.96);
   border-top: 1px solid var(--hairline-soft);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);

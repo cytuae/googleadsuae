@@ -1,34 +1,34 @@
 :root {
-  /* Canvas — warm dark, soft & calming for women */
-  --canvas: #0c090b;
-  --surface-1: #141014;
-  --surface-2: #1a1518;
-  --surface-3: #221c20;
-  --hairline: #3a3036;
-  --hairline-soft: #2a2228;
+  /* Canvas — clean light clinic look */
+  --canvas: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f6f2f4;
+  --surface-3: #efe8eb;
+  --hairline: #e4d4da;
+  --hairline-soft: #efe6ea;
 
-  /* Text — white headlines, soft secondary for hierarchy */
-  --text-primary: #ffffff;
-  --text-secondary: #e8dce1;
-  --text-muted: #c4b0b8;
+  /* Text — dark on white for readability */
+  --text-primary: #1a1216;
+  --text-secondary: #4a3a42;
+  --text-muted: #7a6670;
 
   /* Accent — soft blush rose (trust + comfort) */
-  --accent: #e8a0b5;
-  --accent-hover: #d989a3;
-  --accent-deep: #c46b88;
-  --accent-soft: rgba(232, 160, 181, 0.14);
-  --accent-glow: rgba(232, 160, 181, 0.22);
-  --accent-border: rgba(232, 160, 181, 0.32);
+  --accent: #c46b88;
+  --accent-hover: #b35a78;
+  --accent-deep: #9e4a68;
+  --accent-soft: rgba(196, 107, 136, 0.12);
+  --accent-glow: rgba(196, 107, 136, 0.18);
+  --accent-border: rgba(196, 107, 136, 0.35);
 
-  /* WhatsApp — slightly softer green */
-  --wa: #2dd46f;
-  --wa-hover: #25c063;
-  --wa-soft: rgba(45, 212, 111, 0.14);
+  /* WhatsApp */
+  --wa: #1fad57;
+  --wa-hover: #189a4b;
+  --wa-soft: rgba(31, 173, 87, 0.12);
 
   /* Semantic */
-  --focus: #e8a0b5;
-  --success: #7dcea0;
-  --warning: #e8c07d;
+  --focus: #c46b88;
+  --success: #2e9b63;
+  --warning: #c9922e;
 
   /* Typography */
   --font-display: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
@@ -66,7 +66,7 @@
   --dur-base: 220ms;
 
   /* Shadows */
-  --shadow-soft: 0 0 90px var(--accent-glow);
+  --shadow-soft: 0 12px 40px rgba(26, 18, 22, 0.08);
 }
 
 @media (min-width: 768px) {

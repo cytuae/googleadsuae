@@ -5,9 +5,7 @@
   var SITE = window.SITE_CONFIG || {
     whatsapp: "971547952044",
     domain: "https://dr-ohood.clinic",
-    city: "المملكة العربية السعودية",
-    hours: "الرد خلال ساعات العمل",
-    licenseNote: "الترخيص الرسمي متاح عند الطلب عبر واتساب",
+    hours: "الرد خلال دقايق",
     waDefaultText: "مرحبا دكتورة عهود، أرغب باستشارة مجانية"
   };
 
@@ -70,14 +68,8 @@
   var yearEl = document.getElementById("year");
   if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
-  var cityEl = document.querySelector("[data-site-city]");
-  if (cityEl && SITE.city) cityEl.textContent = SITE.city;
-
   var hoursEl = document.querySelector("[data-site-hours]");
   if (hoursEl && SITE.hours) hoursEl.textContent = SITE.hours;
-
-  var licenseEl = document.querySelector("[data-site-license]");
-  if (licenseEl && SITE.licenseNote) licenseEl.textContent = SITE.licenseNote;
 
   var header = document.querySelector("[data-header]");
   if (header) {
