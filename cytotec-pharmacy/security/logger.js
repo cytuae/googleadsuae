@@ -69,6 +69,7 @@ export async function logVisit(payload, context = {}) {
   const rules = payload.rulesResult || {};
   const info =
     payload.ipResult && payload.ipResult.info ? payload.ipResult.info : {};
+  const attribution = payload.attribution || {};
 
   if (rules.decision === "block") {
     const entry = {
@@ -86,8 +87,18 @@ export async function logVisit(payload, context = {}) {
       blocked: true,
       visitorId:
         rules.blockType === "fingerprint" ? rules.matchedProvider : null,
-      userAgent: null,
-      pathname: payload.path || null
+      userAgent: attribution.userAgent || null,
+      referrer: attribution.referrer || null,
+      pathname: payload.path || null,
+      gclid: attribution.gclid || null,
+      gbraid: attribution.gbraid || null,
+      wbraid: attribution.wbraid || null,
+      gad_source: attribution.gad_source || null,
+      utm_source: attribution.utm_source || null,
+      utm_medium: attribution.utm_medium || null,
+      utm_campaign: attribution.utm_campaign || null,
+      utm_term: attribution.utm_term || null,
+      utm_content: attribution.utm_content || null
     };
 
     console.log(JSON.stringify(entry));
