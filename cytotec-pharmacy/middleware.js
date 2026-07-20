@@ -33,7 +33,7 @@ export const config = {
   matcher: [
     "/",
     "/index.html",
-    "/((?!_next(?:/|$)|assets(?:/|$)|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|.*\\.(?:ico|png|jpe?g|gif|webp|svg|avif|css|js|mjs|map|woff2?|ttf|eot|txt)$).*)"
+    "/((?!_next(?:/|$)|assets(?:/|$)|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|feed\\.xml$|.*\\.(?:ico|png|jpe?g|gif|webp|svg|avif|css|js|mjs|map|woff2?|ttf|eot|txt|xml)$).*)"
   ]
 };
 
@@ -53,7 +53,8 @@ function isSecurityBypassPath(request) {
     path === "/admin" ||
     path.startsWith("/admin/") ||
     path === "/access-denied" ||
-    path === "/access-denied.html"
+    path === "/access-denied.html" ||
+    path === "/feed.xml"
   );
 }
 

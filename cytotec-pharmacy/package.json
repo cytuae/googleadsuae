@@ -2,6 +2,9 @@
   "name": "cytotec-pharmacy",
   "private": true,
   "scripts": {
+    "feed": "node scripts/generate-feed.mjs",
+    "prebuild": "npm run feed",
+    "predev": "npm run feed",
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
