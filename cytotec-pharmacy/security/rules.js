@@ -45,7 +45,11 @@ const COUNTRY_NAME_TO_CODE = {
   PAKISTAN: "PK",
   "UNITED ARAB EMIRATES": "AE",
   UAE: "AE",
-  MOROCCO: "MA"
+  MOROCCO: "MA",
+  "SAUDI ARABIA": "SA",
+  KSA: "SA",
+  OMAN: "OM",
+  KUWAIT: "KW"
 };
 
 /**
@@ -356,7 +360,7 @@ export async function applyRules(context) {
   }
 
   // -------------------------------------------------------------------------
-  // Geo: allowlist (AE, MA)
+  // Geo: allowlist (AE, MA, SA, OM, KW)
   // -------------------------------------------------------------------------
   if (allowedCountries.includes(country)) {
     return {

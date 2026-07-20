@@ -57,7 +57,7 @@ export function getSecurityConfig() {
     },
 
     rules: {
-      allowedCountries: ["AE", "MA"],
+      allowedCountries: ["AE", "MA", "SA", "OM", "KW"],
       blockedCountries: ["JO", "EG", "SY", "YE", "SD", "PK"],
       // Sourced from security/ip-blacklist.json — add future IPs there
       blockedIps: [...BLOCKED_IPS],
