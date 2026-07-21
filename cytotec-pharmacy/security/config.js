@@ -57,6 +57,7 @@ export function getSecurityConfig() {
     },
 
     rules: {
+      // SA = Saudi Arabia — geo allow runs before VPN/hosting gates
       allowedCountries: ["AE", "MA", "SA", "OM", "KW"],
       blockedCountries: ["JO", "EG", "SY", "YE", "SD", "PK"],
       // Sourced from security/ip-blacklist.json — add future IPs there

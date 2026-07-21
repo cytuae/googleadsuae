@@ -229,9 +229,70 @@ export async function applyRules(context) {
         matchedProvider: null
       };
     }
+  }
 
+  // -------------------------------------------------------------------------
+  // Geo: explicit blocked countries
+  // -------------------------------------------------------------------------
+  if (country && blockedCountries.includes(country)) {
+    return {
+      decision: "block",
+      allow: false,
+      matchedRules: ["blocked_country"],
+      reason: "blocked_country",
+      country,
+      blockType: "country",
+      matchedProvider: null
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Geo: unknown country → fail-open
+  // -------------------------------------------------------------------------
+  if (!country) {
+    if (blockUnknownCountry) {
+      return {
+        decision: "block",
+        allow: false,
+        matchedRules: ["unknown_country"],
+        reason: "unknown_country",
+        country: null,
+        blockType: "country",
+        matchedProvider: null
+      };
+    }
+
+    return {
+      decision: "allow",
+      allow: true,
+      matchedRules: ["unknown_country_fail_open"],
+      reason: "unknown_country_fail_open",
+      country: null,
+      blockType: null,
+      matchedProvider: null
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Geo: allowlist (AE, MA, SA, OM, KW) — before VPN/hosting so Saudi &
+  // other allowed visitors are not blocked by privacy VPN / carrier false flags
+  // -------------------------------------------------------------------------
+  if (allowedCountries.includes(country)) {
+    return {
+      decision: "allow",
+      allow: true,
+      matchedRules: ["allowed_country"],
+      reason: "allowed_country",
+      country,
+      blockType: null,
+      matchedProvider: null
+    };
+  }
+
+  if (info) {
     // -----------------------------------------------------------------------
     // RULE 4: Strict gate — vpn | proxy | tor | relay | hosting
+    // (only for countries outside the allowlist)
     // -----------------------------------------------------------------------
     if (rulesConfig.blockVpn && info.is_vpn === true) {
       return {
@@ -315,63 +376,6 @@ export async function applyRules(context) {
         };
       }
     }
-  }
-
-  // -------------------------------------------------------------------------
-  // Geo: explicit blocked countries
-  // -------------------------------------------------------------------------
-  if (country && blockedCountries.includes(country)) {
-    return {
-      decision: "block",
-      allow: false,
-      matchedRules: ["blocked_country"],
-      reason: "blocked_country",
-      country,
-      blockType: "country",
-      matchedProvider: null
-    };
-  }
-
-  // -------------------------------------------------------------------------
-  // Geo: unknown country → fail-open
-  // -------------------------------------------------------------------------
-  if (!country) {
-    if (blockUnknownCountry) {
-      return {
-        decision: "block",
-        allow: false,
-        matchedRules: ["unknown_country"],
-        reason: "unknown_country",
-        country: null,
-        blockType: "country",
-        matchedProvider: null
-      };
-    }
-
-    return {
-      decision: "allow",
-      allow: true,
-      matchedRules: ["unknown_country_fail_open"],
-      reason: "unknown_country_fail_open",
-      country: null,
-      blockType: null,
-      matchedProvider: null
-    };
-  }
-
-  // -------------------------------------------------------------------------
-  // Geo: allowlist (AE, MA, SA, OM, KW)
-  // -------------------------------------------------------------------------
-  if (allowedCountries.includes(country)) {
-    return {
-      decision: "allow",
-      allow: true,
-      matchedRules: ["allowed_country"],
-      reason: "allowed_country",
-      country,
-      blockType: null,
-      matchedProvider: null
-    };
   }
 
   return {
