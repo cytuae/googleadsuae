@@ -5,11 +5,20 @@
  * Uses @fingerprintjs/fingerprintjs (vendored UMD) to generate visitorId,
  * then POSTs device + Ads identifiers to /api/security/fingerprint.
  * On 403 → redirect to /access-denied. Errors never break the page.
+ *
+ * Reuses window.AdsIdentity for gclid/gbraid/wbraid + visitorId persistence.
  */
 (function () {
   "use strict";
 
   var SESSION_KEY = "fp_security_sent_v1";
+
+  // Always refresh click-ids from URL (even if fingerprint already sent)
+  try {
+    if (window.AdsIdentity && typeof window.AdsIdentity.captureFromUrl === "function") {
+      window.AdsIdentity.captureFromUrl();
+    }
+  } catch (e) {}
 
   try {
     if (window.sessionStorage && sessionStorage.getItem(SESSION_KEY) === "1") {
@@ -25,6 +34,15 @@
     } catch (e) {
       return null;
     }
+  }
+
+  function adsId(name) {
+    try {
+      if (window.AdsIdentity && typeof window.AdsIdentity.getClickId === "function") {
+        return window.AdsIdentity.getClickId(name);
+      }
+    } catch (e) {}
+    return queryParam(name);
   }
 
   function collectDevice() {
@@ -55,9 +73,9 @@
       deviceMemory:
         typeof nav.deviceMemory === "number" ? nav.deviceMemory : null,
       pathname: window.location.pathname || "/",
-      gclid: queryParam("gclid"),
-      gbraid: queryParam("gbraid"),
-      wbraid: queryParam("wbraid"),
+      gclid: adsId("gclid"),
+      gbraid: adsId("gbraid"),
+      wbraid: adsId("wbraid"),
       utm_source: queryParam("utm_source"),
       utm_medium: queryParam("utm_medium"),
       utm_campaign: queryParam("utm_campaign"),
@@ -77,6 +95,12 @@
   }
 
   function postFingerprint(visitorId) {
+    try {
+      if (window.AdsIdentity && typeof window.AdsIdentity.setVisitorId === "function") {
+        window.AdsIdentity.setVisitorId(visitorId);
+      }
+    } catch (e) {}
+
     var payload = collectDevice();
     payload.visitorId = visitorId;
 

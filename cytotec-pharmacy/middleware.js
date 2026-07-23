@@ -48,6 +48,8 @@ function isSecurityBypassPath(request) {
   return (
     path === "/api/security/fingerprint" ||
     path.startsWith("/api/security/fingerprint/") ||
+    path === "/api/security/whatsapp-click" ||
+    path.startsWith("/api/security/whatsapp-click/") ||
     path === "/api/security/ingest-event" ||
     path.startsWith("/api/admin/") ||
     path === "/admin" ||
