@@ -20,8 +20,12 @@
 import { isBlockedIP } from "./blocklist";
 import {
   isProviderBlacklisted,
-  isAsnBlacklisted
+  isAsnBlacklisted,
+  normalizeAsn
 } from "./blacklists";
+
+/** GTHost ASN — dedicated block reason (IPinfo-verified ASN only). */
+const BLOCKED_ASN_GTHOST = "63023";
 
 /**
  * @typedef {'allow' | 'challenge' | 'block'} RuleDecision
@@ -211,6 +215,23 @@ export async function applyRules(context) {
         country,
         blockType: "provider",
         matchedProvider: providerHit.value
+      };
+    }
+
+    // -----------------------------------------------------------------------
+    // RULE 3a: GTHost ASN AS63023 → blocked_asn_gthost
+    // Runs after Google crawler allow (middleware / isGoogleBot) and before
+    // generic ASN / hosting gates.
+    // -----------------------------------------------------------------------
+    if (normalizeAsn(info.asn) === BLOCKED_ASN_GTHOST) {
+      return {
+        decision: "block",
+        allow: false,
+        matchedRules: ["blocked_asn_gthost"],
+        reason: "blocked_asn_gthost",
+        country,
+        blockType: "asn",
+        matchedProvider: "AS63023"
       };
     }
 

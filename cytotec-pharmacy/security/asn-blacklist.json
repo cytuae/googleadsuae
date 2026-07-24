@@ -1,4 +1,4 @@
 {
-  "_comment": "Permanent ASN blacklist (Security Layer v2). Add ASN numbers to the \"asns\" array as \"AS12345\" or \"12345\". Edit this file and redeploy — middleware logic does not need changes.",
-  "asns": []
+  "_comment": "Permanent ASN blacklist (Security Layer v2). Add ASN numbers to the \"asns\" array as \"AS12345\" or \"12345\". Edit this file and redeploy — middleware logic does not need changes. Note: AS63023 (GTHost) is also hard-blocked in rules.js as blocked_asn_gthost.",
+  "asns": ["AS63023"]
 }
