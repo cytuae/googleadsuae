@@ -1160,3 +1160,9 @@
     display: none;
   }
 }
+
+/* Fingerprint gate: WhatsApp CTAs non-interactive until fp-security-ready */
+html:not(.fp-security-ready) [data-cta="whatsapp"] {
+  pointer-events: none;
+  cursor: default;
+}

@@ -2,14 +2,14 @@
  * Security rules engine — Security Layer v2
  * -----------------------------------------
  * Order:
- * 1) Google bots → allow
+ * 1) Verified Google crawler flag (middleware verifies IP/DNS first)
  * 2) IP blacklist (ip-blacklist.json) → 403 (even if IPinfo fails)
  * 3) IPinfo failure → allow (fail-open, never 500)
  * 4) Provider/company blacklist (provider-blacklist.json) → 403
  * 5) ASN blacklist (asn-blacklist.json) → 403
- * 6) Strict gate: vpn | proxy | tor | relay | hosting
- * 7) Hosting/datacenter ASN–company keywords
- * 8) Geo blocklist / allowlist
+ * 6) Geo blocklist / allowlist (AE, MA, SA, OM, KW)
+ * 7) Strict gate: vpn | proxy | tor | relay | hosting (non-allowlisted)
+ * 8) Hosting/datacenter ASN–company keywords → else country_not_allowed
  *
  * Future entries:
  *   IPs       → security/ip-blacklist.json
@@ -17,7 +17,7 @@
  *   ASNs      → security/asn-blacklist.json
  */
 
-import { isBlockedIP } from "./blocklist";
+import { isBlockedIP, isBlockedIPRange } from "./blocklist";
 import {
   isProviderBlacklisted,
   isAsnBlacklisted,
@@ -138,14 +138,15 @@ export async function applyRules(context) {
   const blockUnknownCountry = Boolean(rulesConfig.blockUnknownCountry);
 
   // -------------------------------------------------------------------------
-  // RULE: Google bot bypass (Ads / Search crawlers — keep Quality Score safe)
+  // RULE: Verified Google crawler (set only after IP/DNS verification)
+  // Prefer middleware path: allowed_verified_google_crawler
   // -------------------------------------------------------------------------
   if (context.isGoogleBot) {
     return {
       decision: "allow",
       allow: true,
-      matchedRules: ["google_bot_bypass"],
-      reason: "google_bot_bypass",
+      matchedRules: ["allowed_verified_google_crawler"],
+      reason: "allowed_verified_google_crawler",
       country,
       blockType: null,
       matchedProvider: null
@@ -167,6 +168,18 @@ export async function applyRules(context) {
   const ipDenied =
     isBlockedIP(clientIp) ||
     denylist.some((entry) => String(entry).trim() === clientIp.trim());
+
+  if (clientIp && isBlockedIPRange(clientIp)) {
+    return {
+      decision: "block",
+      allow: false,
+      matchedRules: ["blocked_ip_range"],
+      reason: "blocked_ip_range",
+      country,
+      blockType: "ip",
+      matchedProvider: null
+    };
+  }
 
   if (clientIp && ipDenied) {
     return {

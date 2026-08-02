@@ -6,12 +6,37 @@
  * then POSTs device + Ads identifiers to /api/security/fingerprint.
  * On 403 → redirect to /access-denied. Errors never break the page.
  *
+ * WhatsApp CTAs stay non-interactive until fingerprint check completes
+ * (html.fp-security-ready), so blocked visitors cannot click during the check.
+ *
  * Reuses window.AdsIdentity for gclid/gbraid/wbraid + visitorId persistence.
  */
 (function () {
   "use strict";
 
   var SESSION_KEY = "fp_security_sent_v1";
+  var READY_CLASS = "fp-security-ready";
+
+  function unlockWhatsApp() {
+    try {
+      document.documentElement.classList.add(READY_CLASS);
+      document.querySelectorAll("[data-cta='whatsapp']").forEach(function (el) {
+        el.removeAttribute("aria-disabled");
+        if (el.getAttribute("data-wa-href-locked") === "1") {
+          el.removeAttribute("data-wa-href-locked");
+        }
+      });
+    } catch (e) {}
+  }
+
+  function lockWhatsApp() {
+    try {
+      document.documentElement.classList.remove(READY_CLASS);
+      document.querySelectorAll("[data-cta='whatsapp']").forEach(function (el) {
+        el.setAttribute("aria-disabled", "true");
+      });
+    } catch (e) {}
+  }
 
   // Always refresh click-ids from URL (even if fingerprint already sent)
   try {
@@ -20,13 +45,17 @@
     }
   } catch (e) {}
 
+  // Gate WhatsApp until fingerprint finishes (or prior session already cleared)
   try {
     if (window.sessionStorage && sessionStorage.getItem(SESSION_KEY) === "1") {
+      unlockWhatsApp();
       return;
     }
   } catch (e) {
     // ignore storage errors
   }
+
+  lockWhatsApp();
 
   function queryParam(name) {
     try {
@@ -114,16 +143,21 @@
       .then(function (res) {
         markSent();
         if (res && res.status === 403) {
+          // Keep WA locked; hard-navigate to 403 page
           window.location.replace("/access-denied");
+          return;
         }
+        unlockWhatsApp();
       })
       .catch(function () {
-        // Fail-safe: never break landing / tracking
+        // Fail-safe: never break landing — unlock WA if check cannot complete
+        unlockWhatsApp();
       });
   }
 
   function start(FingerprintJS) {
     if (!FingerprintJS || typeof FingerprintJS.load !== "function") {
+      unlockWhatsApp();
       return;
     }
 
@@ -132,15 +166,31 @@
         return agent.get();
       })
       .then(function (result) {
-        if (!result || !result.visitorId) return;
+        if (!result || !result.visitorId) {
+          unlockWhatsApp();
+          return;
+        }
         return postFingerprint(String(result.visitorId));
       })
       .catch(function () {
-        // Fail-safe
+        unlockWhatsApp();
       });
   }
 
   if (window.FingerprintJS) {
     start(window.FingerprintJS);
+  } else {
+    // Script order race: retry briefly, then fail-open
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries += 1;
+      if (window.FingerprintJS) {
+        clearInterval(timer);
+        start(window.FingerprintJS);
+      } else if (tries >= 20) {
+        clearInterval(timer);
+        unlockWhatsApp();
+      }
+    }, 100);
   }
 })();

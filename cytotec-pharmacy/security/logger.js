@@ -96,6 +96,7 @@ export async function logVisit(payload, context = {}) {
   }
 
   if (
+    rules.reason === "allowed_verified_google_crawler" ||
     rules.reason === "google_bot_bypass" ||
     rules.reason === "trusted_bot_bypass"
   ) {
@@ -103,11 +104,12 @@ export async function logVisit(payload, context = {}) {
       JSON.stringify({
         timestamp: payload.timestamp || new Date().toISOString(),
         ip: payload.ip || null,
-        provider: null,
+        provider: rules.matchedProvider || null,
         company: null,
         asn: null,
         country: null,
-        reason: rules.reason
+        reason: rules.reason,
+        verifyMethod: rules.verifyMethod || null
       })
     );
   }

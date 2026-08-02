@@ -3,17 +3,15 @@
  * -------------------------------------------------------------------
  * Check order:
  *   0. Bypass fingerprint API + /access-denied (no redirect loops)
- *   1. security_blocked cookie / device_fingerprint blacklist → 403
- *   2. IP blacklist → 403
- *   3. Provider/company blacklist → 403
- *   4. ASN blacklist → 403
- *   5. vpn | proxy | tor | relay | hosting
+ *   1. Verified Google crawlers (IP ranges / reverse+forward DNS)
+ *   2. Blocked IP ranges (e.g. 45.45.237.0/24) → 403 blocked_ip_range
+ *   3. security_blocked cookie / blocked visitorId → 403 blocked_visitor_id
+ *   4. IPinfo lookup
+ *   5. trusted_bot_bypass only for AS15169 + Google LLC + Googlebot/AdsBot
+ *   6. Remaining IP / provider / ASN / geo / hosting rules
  *
- * Blacklists (edit JSON, redeploy — no middleware logic changes):
- *   security/ip-blacklist.json
- *   security/provider-blacklist.json
- *   security/asn-blacklist.json
- *   security/fingerprint-blacklist.json
+ * Verified Google bots receive the same landing HTML as normal users
+ * (no cloaking). Spoofed Google UAs do not bypass hosting/JO blocks.
  *
  * Fail-open on errors. Never 500. Never expose secrets.
  *
@@ -26,8 +24,12 @@ import { checkIP, extractClientIP } from "./security/ipinfo";
 import { applyRules } from "./security/rules";
 import { logVisit } from "./security/logger";
 import { createForbiddenResponse } from "./security/responses";
-import { isTrustedSecurityBypassBot } from "./security/bots";
+import {
+  isTrustedSecurityBypassBot,
+  verifyGoogleCrawlerRequest
+} from "./security/bots";
 import { evaluateFingerprintCookies } from "./security/fingerprint";
+import { isBlockedIPRange } from "./security/blocklist";
 
 export const config = {
   matcher: [
@@ -50,13 +52,14 @@ function isSecurityBypassPath(request) {
     path.startsWith("/api/security/fingerprint/") ||
     path === "/api/security/whatsapp-click" ||
     path.startsWith("/api/security/whatsapp-click/") ||
+    path === "/api/security/ads-config" ||
+    path.startsWith("/api/security/ads-config/") ||
     path === "/api/security/ingest-event" ||
     path.startsWith("/api/admin/") ||
     path === "/admin" ||
     path.startsWith("/admin/") ||
     path === "/access-denied" ||
-    path === "/access-denied.html" ||
-    path === "/feed.xml"
+    path === "/access-denied.html"
   );
 }
 
@@ -112,38 +115,83 @@ export async function middleware(request) {
       return NextResponse.next();
     }
 
-    // Google Ads / Statcounter verifiers — never block
-    if (isTrustedSecurityBypassBot(request)) {
+    const securityConfig = getSecurityConfig();
+    const clientIp = extractClientIP(request);
+
+    // Verified Google crawlers — before Hosting/VPN/Proxy/geo/IP-range blocks.
+    // Same page as normal users (rewrite to index.html only; no alternate HTML).
+    const googleVerify = await verifyGoogleCrawlerRequest(request, clientIp);
+    if (googleVerify.verified) {
       try {
         await logVisit(
           {
             timestamp: new Date().toISOString(),
             method: request.method,
             path: request.nextUrl.pathname,
-            ip: extractClientIP(request),
+            ip: clientIp,
             requestId,
             rulesResult: {
               decision: "allow",
               allow: true,
-              matchedRules: ["trusted_bot_bypass"],
-              reason: "trusted_bot_bypass",
+              matchedRules: ["allowed_verified_google_crawler"],
+              reason: "allowed_verified_google_crawler",
               country: null,
-              blockType: null
+              blockType: null,
+              matchedProvider: googleVerify.bot || null,
+              verifyMethod: googleVerify.method
             }
           },
-          {}
+          { config: securityConfig }
         );
       } catch {
         // never fail the request for logging
       }
       return serveLanding(request, {
         requestId,
-        reason: "trusted_bot_bypass",
-        engineVersion: getSecurityConfig().version
+        reason: "allowed_verified_google_crawler",
+        engineVersion: securityConfig.version
       });
     }
 
-    const securityConfig = getSecurityConfig();
+    // Blocked IP ranges (e.g. 45.45.237.0/24) — 403 before page HTML
+    if (
+      isEnforcementEnabled(securityConfig) &&
+      clientIp &&
+      clientIp !== "unknown" &&
+      isBlockedIPRange(clientIp)
+    ) {
+      try {
+        await logVisit(
+          {
+            timestamp: new Date().toISOString(),
+            method: request.method,
+            path: request.nextUrl.pathname,
+            ip: clientIp,
+            requestId,
+            rulesResult: {
+              decision: "block",
+              allow: false,
+              matchedRules: ["blocked_ip_range"],
+              reason: "blocked_ip_range",
+              country: null,
+              blockType: "ip",
+              matchedProvider: null
+            }
+          },
+          { config: securityConfig }
+        );
+      } catch {
+        // ignore
+      }
+
+      return createForbiddenResponse({
+        requestId,
+        engineVersion: securityConfig.version,
+        blockType: "ip",
+        country: null,
+        reason: "blocked_ip_range"
+      });
+    }
 
     if (securityConfig.mode === "off" || !securityConfig.providers.rules) {
       return serveLanding(request, {
@@ -153,7 +201,7 @@ export async function middleware(request) {
       });
     }
 
-    // Device Fingerprint Security Layer v1 — cookie gate (before IPinfo)
+    // Device Fingerprint — cookie / visitorId gate
     if (securityConfig.providers.fingerprint !== false) {
       const fpGate = evaluateFingerprintCookies(request);
       if (fpGate.blocked && isEnforcementEnabled(securityConfig)) {
@@ -163,13 +211,13 @@ export async function middleware(request) {
               timestamp: new Date().toISOString(),
               method: request.method,
               path: request.nextUrl.pathname,
-              ip: extractClientIP(request),
+              ip: clientIp,
               requestId,
               rulesResult: {
                 decision: "block",
                 allow: false,
-                matchedRules: ["device_fingerprint_blacklist"],
-                reason: "device_fingerprint_blacklist",
+                matchedRules: ["blocked_visitor_id"],
+                reason: "blocked_visitor_id",
                 country: null,
                 blockType: "fingerprint",
                 matchedProvider: fpGate.visitorId
@@ -186,12 +234,45 @@ export async function middleware(request) {
           engineVersion: securityConfig.version,
           blockType: "fingerprint",
           country: null,
-          reason: "device_fingerprint_blacklist"
+          reason: "blocked_visitor_id"
         });
       }
     }
 
     const ipResult = await checkIP(request, { config: securityConfig });
+
+    // trusted_bot_bypass — AS15169 + Google LLC + Googlebot/AdsBot only
+    if (isTrustedSecurityBypassBot(request, ipResult)) {
+      try {
+        await logVisit(
+          {
+            timestamp: new Date().toISOString(),
+            method: request.method,
+            path: request.nextUrl.pathname,
+            ip: ipResult.ip || clientIp,
+            requestId,
+            ipResult,
+            rulesResult: {
+              decision: "allow",
+              allow: true,
+              matchedRules: ["trusted_bot_bypass"],
+              reason: "trusted_bot_bypass",
+              country:
+                (ipResult.info && ipResult.info.country) || null,
+              blockType: null
+            }
+          },
+          { config: securityConfig }
+        );
+      } catch {
+        // never fail the request for logging
+      }
+      return serveLanding(request, {
+        requestId,
+        reason: "trusted_bot_bypass",
+        engineVersion: securityConfig.version
+      });
+    }
 
     const rulesResult = await applyRules({
       request,

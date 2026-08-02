@@ -30,7 +30,7 @@ export function evaluateFingerprintCookies(request) {
     if (securityBlocked === "1") {
       return {
         blocked: true,
-        reason: "device_fingerprint_blacklist",
+        reason: "blocked_visitor_id",
         visitorId
       };
     }
@@ -38,7 +38,7 @@ export function evaluateFingerprintCookies(request) {
     if (visitorId && isFingerprintBlacklisted(visitorId)) {
       return {
         blocked: true,
-        reason: "device_fingerprint_blacklist",
+        reason: "blocked_visitor_id",
         visitorId
       };
     }

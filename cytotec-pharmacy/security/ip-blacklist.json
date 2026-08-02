@@ -1,5 +1,11 @@
 {
-  "_comment": "Permanent IP blacklist (Security Layer v2). Add one IPv4/IPv6 address per entry in the \"ips\" array. Edit this file and redeploy \u2014 middleware logic does not need changes.",
+  "_comment": "Permanent IP blacklist (Security Layer v2). Add exact IPs in \"ips\", CIDR in \"ranges\", or prefixes in \"prefixes\". Range matches log reason blocked_ip_range.",
+  "ranges": [
+    "45.45.237.0/24"
+  ],
+  "prefixes": [
+    "45.45.237."
+  ],
   "ips": [
     "2.48.42.6",
     "2.48.100.244",

@@ -1,113 +1,59 @@
 /**
  * Trusted crawler / verifier detection
  * ------------------------------------
- * Google Ads/Search bots + Statcounter (and similar) install verifiers.
- * Edge: User-Agent + path heuristics only (no DNS verify).
+ * trusted_bot_bypass is strict:
+ *   ASN AS15169 + company Google LLC + Googlebot/AdsBot UA
+ * Empty IPinfo / hosting traffic never receives trusted_bot_bypass.
+ *
+ * Broader Google crawler verification (IP ranges / DNS) lives in google-verify.js.
  */
 
-/**
- * @see https://developers.google.com/search/docs/crawling-indexing/overview-google-crawlers
- */
-const GOOGLE_BOT_UA =
-  /(?:Googlebot|Google-InspectionTool|AdsBot-Google|Mediapartners-Google|APIs-Google|FeedFetcher-Google|Storebot-Google|GoogleOther|Google-Site-Verification|DuplexWeb-Google|Google-Read-Aloud|Google-Producer|Google-Safety)/i;
+import { normalizeAsn } from "./blacklists";
+import {
+  isAllowedGoogleCrawlerUserAgent,
+  verifyGoogleCrawlerRequest
+} from "./google-verify";
 
-const STATCOUNTER_UA = /statcounter/i;
-
-/** Non-browser clients often used by Statcounter "Verify Installation" */
-const SCRIPT_VERIFIER_UA =
-  /(?:python-requests|python-urllib|curl\/|wget\/|Go-http-client|axios\/|node-fetch|Scrapy|Java\/|Apache-HttpClient|libwww-perl|http\.rb|Faraday)/i;
-
-/**
- * @param {Request} request
- * @returns {string}
- */
-function getPathname(request) {
-  try {
-    return new URL(request.url).pathname || "/";
-  } catch {
-    return "/";
-  }
-}
+/** UA must be Googlebot or AdsBot (desktop/mobile). */
+const TRUSTED_GOOGLE_UA =
+  /(?:AdsBot-Google-Mobile|AdsBot-Google|Googlebot)/i;
 
 /**
  * @param {Request} request
  * @returns {boolean}
  */
 export function isGoogleAdsOrSearchBot(request) {
-  const ua = request.headers.get("user-agent") || "";
-  if (!ua) return false;
-  return GOOGLE_BOT_UA.test(ua);
+  return isAllowedGoogleCrawlerUserAgent(request);
 }
 
 /**
- * @param {Request} request
- * @returns {boolean}
- */
-export function isStatCounterBot(request) {
-  const ua = request.headers.get("user-agent") || "";
-  if (!ua) return false;
-  return STATCOUNTER_UA.test(ua);
-}
-
-/**
- * Statcounter dashboard verify often fetches / from a datacenter with a
- * non-browser User-Agent. Allow only on HTML entry paths.
+ * Strict trusted_bot_bypass — requires verified IPinfo signals.
+ * Never grants bypass for empty ASN/company or hosting-classified IPs.
  *
  * @param {Request} request
+ * @param {{ ok?: boolean, info?: { asn?: string|null, company?: string|null, is_hosting?: boolean|null }|null }|null|undefined} [ipResult]
  * @returns {boolean}
  */
-export function isInstallVerifierClient(request) {
-  const path = getPathname(request);
-  if (path !== "/" && path !== "/index.html") return false;
-
+export function isTrustedSecurityBypassBot(request, ipResult) {
   const ua = request.headers.get("user-agent") || "";
-  if (!ua) return false;
-  if (STATCOUNTER_UA.test(ua)) return true;
+  if (!ua || !TRUSTED_GOOGLE_UA.test(ua)) return false;
 
-  // Real browsers always include Mozilla/AppleWebKit — skip those
-  if (/Mozilla\/|AppleWebKit\/|Chrome\/|Safari\/|Firefox\//i.test(ua)) {
-    return false;
-  }
+  if (!ipResult || ipResult.ok !== true || !ipResult.info) return false;
 
-  return SCRIPT_VERIFIER_UA.test(ua);
+  const info = ipResult.info;
+  const asn = info.asn;
+  const company = info.company;
+
+  // Empty IPinfo data → no bypass
+  if (!asn || !company) return false;
+
+  // Hosting-classified traffic → no bypass (Google crawlers use AS15169 path / verify)
+  if (info.is_hosting === true) return false;
+
+  if (normalizeAsn(asn) !== "15169") return false;
+  if (!/google\s*llc/i.test(String(company))) return false;
+
+  return true;
 }
 
-/**
- * Simple server-side fetch signature (Statcounter verify / uptime checks).
- * Real browsers send sec-ch-ua + accept-language on navigate.
- *
- * @param {Request} request
- * @returns {boolean}
- */
-export function isSimpleServerFetch(request) {
-  const path = getPathname(request);
-  if (path !== "/" && path !== "/index.html") return false;
-
-  if (request.headers.get("sec-ch-ua")) return false;
-  if (request.headers.get("sec-fetch-mode") === "navigate") return false;
-
-  const ua = request.headers.get("user-agent") || "";
-  const acceptLanguage = request.headers.get("accept-language");
-
-  if (STATCOUNTER_UA.test(ua)) return true;
-  if (SCRIPT_VERIFIER_UA.test(ua)) return true;
-
-  // No Accept-Language + no Mozilla → almost certainly not a real visitor browser
-  if (!acceptLanguage && ua && !/Mozilla\//i.test(ua)) return true;
-
-  return false;
-}
-
-/**
- * Bots that must never be geo/hosting-blocked.
- * @param {Request} request
- * @returns {boolean}
- */
-export function isTrustedSecurityBypassBot(request) {
-  return (
-    isGoogleAdsOrSearchBot(request) ||
-    isStatCounterBot(request) ||
-    isInstallVerifierClient(request) ||
-    isSimpleServerFetch(request)
-  );
-}
+export { verifyGoogleCrawlerRequest, isAllowedGoogleCrawlerUserAgent };

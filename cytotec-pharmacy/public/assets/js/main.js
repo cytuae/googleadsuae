@@ -178,7 +178,8 @@
     }
   }
 
-  // Wire all WhatsApp CTAs — same message everywhere; one listener each
+  // Wire all WhatsApp CTAs — same message everywhere; one listener each.
+  // Clicks are blocked until fingerprint security marks html.fp-security-ready.
   document.querySelectorAll("[data-cta='whatsapp']").forEach(function (el) {
     if (el.getAttribute("data-wa-tracked") === "1") return;
     el.setAttribute("data-wa-tracked", "1");
@@ -186,7 +187,14 @@
     el.setAttribute("href", waUrl(SITE.waDefaultText));
     el.setAttribute("target", "_blank");
     el.setAttribute("rel", "noopener noreferrer");
-    el.addEventListener("click", function () {
+    el.addEventListener("click", function (event) {
+      if (
+        !document.documentElement.classList.contains("fp-security-ready")
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       trackWhatsAppClick(el.getAttribute("data-cta-source") || "whatsapp");
     });
   });

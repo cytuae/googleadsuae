@@ -131,7 +131,7 @@ export async function POST(request) {
       visitorId: data.visitorId,
       ip: ip === "unknown" ? null : ip,
       blocked,
-      reason: blocked ? "device_fingerprint_blacklist" : "fingerprint_ok",
+      reason: blocked ? "blocked_visitor_id" : "fingerprint_ok",
       userAgent: data.userAgent,
       platform: data.platform,
       language: data.language,
@@ -171,7 +171,7 @@ export async function POST(request) {
         }
       }
       const res = NextResponse.json(
-        { ok: true, blocked: true, reason: "device_fingerprint_blacklist" },
+        { ok: true, blocked: true, reason: "blocked_visitor_id" },
         { status: 403 }
       );
       res.cookies.set("security_blocked", "1", COOKIE_BASE);
