@@ -17,10 +17,13 @@
   var SESSION_KEY = "fp_security_sent_v1";
   var READY_CLASS = "fp-security-ready";
 
+  var CONTACT_SELECTOR =
+    "[data-cta='whatsapp'], a[href*='wa.me'], a[href*='api.whatsapp.com'], a[href^='tel:'], a[href^='mailto:']";
+
   function unlockWhatsApp() {
     try {
       document.documentElement.classList.add(READY_CLASS);
-      document.querySelectorAll("[data-cta='whatsapp']").forEach(function (el) {
+      document.querySelectorAll(CONTACT_SELECTOR).forEach(function (el) {
         el.removeAttribute("aria-disabled");
         if (el.getAttribute("data-wa-href-locked") === "1") {
           el.removeAttribute("data-wa-href-locked");
@@ -32,7 +35,7 @@
   function lockWhatsApp() {
     try {
       document.documentElement.classList.remove(READY_CLASS);
-      document.querySelectorAll("[data-cta='whatsapp']").forEach(function (el) {
+      document.querySelectorAll(CONTACT_SELECTOR).forEach(function (el) {
         el.setAttribute("aria-disabled", "true");
       });
     } catch (e) {}

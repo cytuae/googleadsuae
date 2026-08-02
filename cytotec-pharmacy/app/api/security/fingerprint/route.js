@@ -122,7 +122,61 @@ export async function POST(request) {
 
     const data = validated.data;
     const ip = extractClientIP(request);
-    const blocked = isFingerprintBlacklisted(data.visitorId);
+
+    // Permanent visitorId denylist — check before any fingerprint_ok log/response
+    if (isFingerprintBlacklisted(data.visitorId)) {
+      const timestamp = new Date().toISOString();
+      const screen = `${data.screenWidth}x${data.screenHeight}`;
+      const eventPayload = {
+        event: "DEVICE_FINGERPRINT",
+        timestamp,
+        visitorId: data.visitorId,
+        ip: ip === "unknown" ? null : ip,
+        blocked: true,
+        reason: "blocked_visitor_id",
+        userAgent: data.userAgent,
+        platform: data.platform,
+        language: data.language,
+        timezone: data.timezone,
+        screen,
+        devicePixelRatio: data.devicePixelRatio,
+        touchSupport: data.touchSupport,
+        hardwareConcurrency: data.hardwareConcurrency,
+        deviceMemory: data.deviceMemory,
+        pathname: data.pathname,
+        gclid: data.gclid,
+        gbraid: data.gbraid,
+        wbraid: data.wbraid,
+        browser: inferBrowser(data.userAgent),
+        device: inferDevice(data),
+        provider: null,
+        company: null,
+        asn: null,
+        country: null
+      };
+
+      console.info(JSON.stringify(eventPayload));
+
+      const syncMode = String(
+        process.env.SECURITY_EVENT_SYNC || "all"
+      ).toLowerCase();
+      if (syncMode !== "off") {
+        try {
+          await appendSecurityEvent(eventPayload);
+        } catch {
+          // ignore
+        }
+      }
+
+      const res = NextResponse.json(
+        { ok: true, blocked: true, reason: "blocked_visitor_id" },
+        { status: 403 }
+      );
+      res.cookies.set("security_blocked", "1", COOKIE_BASE);
+      res.cookies.set("device_fingerprint", data.visitorId, COOKIE_BASE);
+      return res;
+    }
+
     const timestamp = new Date().toISOString();
     const screen = `${data.screenWidth}x${data.screenHeight}`;
     const eventPayload = {
@@ -130,8 +184,8 @@ export async function POST(request) {
       timestamp,
       visitorId: data.visitorId,
       ip: ip === "unknown" ? null : ip,
-      blocked,
-      reason: blocked ? "blocked_visitor_id" : "fingerprint_ok",
+      blocked: false,
+      reason: "fingerprint_ok",
       userAgent: data.userAgent,
       platform: data.platform,
       language: data.language,
@@ -157,29 +211,8 @@ export async function POST(request) {
     console.log(JSON.stringify(eventPayload));
 
     // Dashboard event store — sync all fingerprints (once/session client-side).
-    // Never await failure into a 500; fire-and-forget after response path.
     const syncMode = String(process.env.SECURITY_EVENT_SYNC || "all").toLowerCase();
-    const shouldSync =
-      syncMode === "all" || (syncMode !== "off" && blocked === true);
-
-    if (blocked) {
-      if (shouldSync) {
-        try {
-          await appendSecurityEvent(eventPayload);
-        } catch {
-          // ignore
-        }
-      }
-      const res = NextResponse.json(
-        { ok: true, blocked: true, reason: "blocked_visitor_id" },
-        { status: 403 }
-      );
-      res.cookies.set("security_blocked", "1", COOKIE_BASE);
-      res.cookies.set("device_fingerprint", data.visitorId, COOKIE_BASE);
-      return res;
-    }
-
-    if (shouldSync) {
+    if (syncMode === "all") {
       void appendSecurityEvent(eventPayload).catch(() => {});
     }
 

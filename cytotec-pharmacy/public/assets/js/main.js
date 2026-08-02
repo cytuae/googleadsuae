@@ -178,6 +178,10 @@
     }
   }
 
+  function isFingerprintReady() {
+    return document.documentElement.classList.contains("fp-security-ready");
+  }
+
   // Wire all WhatsApp CTAs — same message everywhere; one listener each.
   // Clicks are blocked until fingerprint security marks html.fp-security-ready.
   document.querySelectorAll("[data-cta='whatsapp']").forEach(function (el) {
@@ -188,9 +192,7 @@
     el.setAttribute("target", "_blank");
     el.setAttribute("rel", "noopener noreferrer");
     el.addEventListener("click", function (event) {
-      if (
-        !document.documentElement.classList.contains("fp-security-ready")
-      ) {
+      if (!isFingerprintReady()) {
         event.preventDefault();
         event.stopPropagation();
         return;
@@ -198,6 +200,23 @@
       trackWhatsAppClick(el.getAttribute("data-cta-source") || "whatsapp");
     });
   });
+
+  // Extra contact links (tel/mailto/wa.me) — same fingerprint gate
+  document
+    .querySelectorAll(
+      "a[href*='wa.me'], a[href*='api.whatsapp.com'], a[href^='tel:'], a[href^='mailto:']"
+    )
+    .forEach(function (el) {
+      if (el.getAttribute("data-cta") === "whatsapp") return;
+      if (el.getAttribute("data-contact-gated") === "1") return;
+      el.setAttribute("data-contact-gated", "1");
+      el.addEventListener("click", function (event) {
+        if (!isFingerprintReady()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      });
+    });
 
   // Footer dynamic bits
   var yearEl = document.getElementById("year");

@@ -1161,8 +1161,12 @@
   }
 }
 
-/* Fingerprint gate: WhatsApp CTAs non-interactive until fp-security-ready */
-html:not(.fp-security-ready) [data-cta="whatsapp"] {
+/* Fingerprint gate: WhatsApp / contact links non-interactive until fp-security-ready */
+html:not(.fp-security-ready) [data-cta="whatsapp"],
+html:not(.fp-security-ready) a[href*="wa.me"],
+html:not(.fp-security-ready) a[href*="api.whatsapp.com"],
+html:not(.fp-security-ready) a[href^="tel:"],
+html:not(.fp-security-ready) a[href^="mailto:"] {
   pointer-events: none;
   cursor: default;
 }
