@@ -3,12 +3,16 @@
  * -------------------------------------------------------------------
  * Check order:
  *   0. Bypass fingerprint API + /access-denied (no redirect loops)
- *   1. Verified Google crawlers (IP ranges / reverse+forward DNS)
- *   2. Blocked IP ranges (e.g. 45.45.237.0/24) → 403 blocked_ip_range
- *   3. security_blocked cookie / blocked visitorId → 403 blocked_visitor_id
+ *   1. Probe paths (.env / .git / wp-admin / xmlrpc) → 403
+ *   2. Verified Google crawlers (IP ranges / reverse+forward DNS)
+ *   3. Blocked IP ranges (e.g. 45.45.237.0/24) → 403 blocked_ip_range
  *   4. IPinfo lookup
- *   5. trusted_bot_bypass only for AS15169 + Google LLC + Googlebot/AdsBot
- *   6. Remaining IP / provider / ASN / geo / hosting rules
+ *   5. Verified Google via AS15169 + Google LLC + Googlebot/AdsBot UA
+ *      (before blocked_hosting) → allowed_verified_google_crawler
+ *   6. Suspicious visitorId / security_blocked cookie:
+ *        VISITOR_BLOCK_MODE=monitor + UAE residential → allow + flag
+ *        else → 403 blocked_visitor_id
+ *   7. Remaining IP / provider / ASN / geo / hosting rules
  *
  * Verified Google bots receive the same landing HTML as normal users
  * (no cloaking). Spoofed Google UAs do not bypass hosting/JO blocks.
@@ -30,6 +34,7 @@ import {
 } from "./security/bots";
 import { evaluateFingerprintCookies } from "./security/fingerprint";
 import { isBlockedIPRange } from "./security/blocklist";
+import { resolveSuspiciousVisitorDecision } from "./security/visitor-block";
 
 export const config = {
   matcher: [
@@ -41,7 +46,6 @@ export const config = {
 
 /**
  * Paths that skip the public security gate (auth handled elsewhere).
- * Includes private admin dashboard so geo/IP rules never lock out the owner.
  * @param {import('next/server').NextRequest} request
  * @returns {boolean}
  */
@@ -64,28 +68,72 @@ function isSecurityBypassPath(request) {
 }
 
 /**
+ * Hard-block common credential / CMS probes.
+ * @param {string} pathname
+ * @returns {boolean}
+ */
+function isSecurityProbePath(pathname) {
+  const path = String(pathname || "").toLowerCase();
+  if (!path) return false;
+  if (path.includes("/.env") || path.endsWith(".env") || /\/\.env(\.|$)/.test(path)) {
+    return true;
+  }
+  if (path.includes("/.git") || path.startsWith("/.git")) return true;
+  if (path.includes("wp-admin") || path.includes("wp-login")) return true;
+  if (path.includes("xmlrpc.php")) return true;
+  return false;
+}
+
+/**
  * @param {import('next/server').NextRequest} request
- * @param {{ requestId?: string, reason?: string, engineVersion?: string }} [meta]
+ * @returns {{ gclid: string|null, gbraid: string|null, wbraid: string|null }}
+ */
+function readAdsClickIds(request) {
+  const q = request.nextUrl.searchParams;
+  return {
+    gclid: q.get("gclid") || request.cookies.get("gclid")?.value || null,
+    gbraid: q.get("gbraid") || request.cookies.get("gbraid")?.value || null,
+    wbraid: q.get("wbraid") || request.cookies.get("wbraid")?.value || null
+  };
+}
+
+/**
+ * @param {import('next/server').NextRequest} request
+ * @param {{ requestId?: string, reason?: string, engineVersion?: string, clearSecurityBlocked?: boolean }} [meta]
  * @returns {import('next/server').NextResponse}
  */
 function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
   /** @type {Record<string, string>} */
   const headers = {
-    "x-security-engine": meta.engineVersion || "2.1.0",
+    "x-security-engine": meta.engineVersion || "2.4.0",
     "x-security-decision": "allow"
   };
   if (meta.requestId) headers["x-request-id"] = meta.requestId;
   if (meta.reason) headers["x-security-reason"] = meta.reason;
 
+  /** @type {import('next/server').NextResponse} */
+  let res;
   if (url.pathname === "/" || url.pathname === "") {
     url.pathname = "/index.html";
-    return NextResponse.rewrite(url, { headers });
+    res = NextResponse.rewrite(url, { headers });
+  } else {
+    res = NextResponse.next();
+    for (const [k, v] of Object.entries(headers)) {
+      res.headers.set(k, v);
+    }
   }
-  const res = NextResponse.next();
-  for (const [k, v] of Object.entries(headers)) {
-    res.headers.set(k, v);
+
+  if (meta.clearSecurityBlocked) {
+    res.cookies.set("security_blocked", "", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0
+    });
   }
+
   return res;
 }
 
@@ -110,16 +158,49 @@ export async function middleware(request) {
   const requestId = createRequestId();
 
   try {
-    // Fingerprint API, ingest, admin, access-denied — no public gate / no loops
     if (isSecurityBypassPath(request)) {
       return NextResponse.next();
     }
 
     const securityConfig = getSecurityConfig();
     const clientIp = extractClientIP(request);
+    const pathname = request.nextUrl.pathname || "";
+
+    // Probe / credential scans — always hard 403
+    if (isSecurityProbePath(pathname) && isEnforcementEnabled(securityConfig)) {
+      try {
+        await logVisit(
+          {
+            timestamp: new Date().toISOString(),
+            method: request.method,
+            path: pathname,
+            ip: clientIp,
+            requestId,
+            rulesResult: {
+              decision: "block",
+              allow: false,
+              matchedRules: ["blocked_probe_path"],
+              reason: "blocked_probe_path",
+              country: null,
+              blockType: "probe",
+              matchedProvider: null
+            }
+          },
+          { config: securityConfig }
+        );
+      } catch {
+        // ignore
+      }
+      return createForbiddenResponse({
+        requestId,
+        engineVersion: securityConfig.version,
+        blockType: "probe",
+        country: null,
+        reason: "blocked_probe_path"
+      });
+    }
 
     // Verified Google crawlers — before Hosting/VPN/Proxy/geo/IP-range blocks.
-    // Same page as normal users (rewrite to index.html only; no alternate HTML).
     const googleVerify = await verifyGoogleCrawlerRequest(request, clientIp);
     if (googleVerify.verified) {
       try {
@@ -127,7 +208,7 @@ export async function middleware(request) {
           {
             timestamp: new Date().toISOString(),
             method: request.method,
-            path: request.nextUrl.pathname,
+            path: pathname,
             ip: clientIp,
             requestId,
             rulesResult: {
@@ -165,7 +246,7 @@ export async function middleware(request) {
           {
             timestamp: new Date().toISOString(),
             method: request.method,
-            path: request.nextUrl.pathname,
+            path: pathname,
             ip: clientIp,
             requestId,
             rulesResult: {
@@ -201,24 +282,121 @@ export async function middleware(request) {
       });
     }
 
-    // Device Fingerprint — cookie / visitorId gate
+    const ipResult = await checkIP(request, { config: securityConfig });
+
+    // Google AdsBot/Googlebot + AS15169 + Google LLC — before blocked_hosting
+    if (isTrustedSecurityBypassBot(request, ipResult)) {
+      try {
+        await logVisit(
+          {
+            timestamp: new Date().toISOString(),
+            method: request.method,
+            path: pathname,
+            ip: ipResult.ip || clientIp,
+            requestId,
+            ipResult,
+            rulesResult: {
+              decision: "allow",
+              allow: true,
+              matchedRules: ["allowed_verified_google_crawler"],
+              reason: "allowed_verified_google_crawler",
+              country: (ipResult.info && ipResult.info.country) || null,
+              blockType: null,
+              matchedProvider: "AS15169"
+            }
+          },
+          { config: securityConfig }
+        );
+      } catch {
+        // never fail the request for logging
+      }
+      return serveLanding(request, {
+        requestId,
+        reason: "allowed_verified_google_crawler",
+        engineVersion: securityConfig.version
+      });
+    }
+
+    // Device Fingerprint — after IPinfo so UAE residential can be monitor-only
     if (securityConfig.providers.fingerprint !== false) {
       const fpGate = evaluateFingerprintCookies(request);
-      if (fpGate.blocked && isEnforcementEnabled(securityConfig)) {
+      if (fpGate.suspicious && isEnforcementEnabled(securityConfig)) {
+        const adsIds = readAdsClickIds(request);
+        const decision = resolveSuspiciousVisitorDecision({
+          mode: securityConfig.visitorBlockMode,
+          ipInfo: ipResult.info || null,
+          visitorId: fpGate.visitorId
+        });
+
+        if (decision.monitorOnly) {
+          const timestamp = new Date().toISOString();
+          try {
+            await logVisit(
+              {
+                timestamp,
+                method: request.method,
+                path: pathname,
+                ip: ipResult.ip || clientIp,
+                requestId,
+                ipResult,
+                flagged: true,
+                visitorId: decision.visitorId,
+                gclid: adsIds.gclid,
+                gbraid: adsIds.gbraid,
+                wbraid: adsIds.wbraid,
+                rulesResult: {
+                  decision: "allow",
+                  allow: true,
+                  matchedRules: ["monitored_suspicious_visitor"],
+                  reason: "monitored_suspicious_visitor",
+                  country:
+                    (ipResult.info && ipResult.info.country) || "AE",
+                  blockType: "fingerprint",
+                  matchedProvider: decision.visitorId,
+                  flagged: true
+                }
+              },
+              { config: securityConfig }
+            );
+          } catch {
+            // ignore
+          }
+
+          console.info(
+            JSON.stringify({
+              flagged: true,
+              reason: "monitored_suspicious_visitor",
+              visitorId: decision.visitorId,
+              ip: ipResult.ip || clientIp,
+              gclid: adsIds.gclid,
+              gbraid: adsIds.gbraid,
+              timestamp
+            })
+          );
+
+          return serveLanding(request, {
+            requestId,
+            reason: "monitored_suspicious_visitor",
+            engineVersion: securityConfig.version,
+            clearSecurityBlocked: true
+          });
+        }
+
         try {
           await logVisit(
             {
               timestamp: new Date().toISOString(),
               method: request.method,
-              path: request.nextUrl.pathname,
-              ip: clientIp,
+              path: pathname,
+              ip: ipResult.ip || clientIp,
               requestId,
+              ipResult,
               rulesResult: {
                 decision: "block",
                 allow: false,
                 matchedRules: ["blocked_visitor_id"],
                 reason: "blocked_visitor_id",
-                country: null,
+                country: (ipResult.info && ipResult.info.country) || null,
                 blockType: "fingerprint",
                 matchedProvider: fpGate.visitorId
               }
@@ -233,45 +411,10 @@ export async function middleware(request) {
           requestId,
           engineVersion: securityConfig.version,
           blockType: "fingerprint",
-          country: null,
+          country: (ipResult.info && ipResult.info.country) || null,
           reason: "blocked_visitor_id"
         });
       }
-    }
-
-    const ipResult = await checkIP(request, { config: securityConfig });
-
-    // trusted_bot_bypass — AS15169 + Google LLC + Googlebot/AdsBot only
-    if (isTrustedSecurityBypassBot(request, ipResult)) {
-      try {
-        await logVisit(
-          {
-            timestamp: new Date().toISOString(),
-            method: request.method,
-            path: request.nextUrl.pathname,
-            ip: ipResult.ip || clientIp,
-            requestId,
-            ipResult,
-            rulesResult: {
-              decision: "allow",
-              allow: true,
-              matchedRules: ["trusted_bot_bypass"],
-              reason: "trusted_bot_bypass",
-              country:
-                (ipResult.info && ipResult.info.country) || null,
-              blockType: null
-            }
-          },
-          { config: securityConfig }
-        );
-      } catch {
-        // never fail the request for logging
-      }
-      return serveLanding(request, {
-        requestId,
-        reason: "trusted_bot_bypass",
-        engineVersion: securityConfig.version
-      });
     }
 
     const rulesResult = await applyRules({
@@ -286,7 +429,7 @@ export async function middleware(request) {
         {
           timestamp: new Date().toISOString(),
           method: request.method,
-          path: request.nextUrl.pathname,
+          path: pathname,
           ip: ipResult.ip,
           ipResult,
           rulesResult,
@@ -325,7 +468,7 @@ export async function middleware(request) {
     return serveLanding(request, {
       requestId,
       reason: "fail_open",
-      engineVersion: "2.1.0"
+      engineVersion: "2.4.0"
     });
   }
 }

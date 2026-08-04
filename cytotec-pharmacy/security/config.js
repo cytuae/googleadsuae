@@ -11,6 +11,7 @@
  */
 
 import { BLOCKED_IPS } from "./blocklist";
+import { getVisitorBlockMode } from "./visitor-block";
 
 /** @typedef {'off' | 'monitor' | 'enforce'} SecurityMode */
 
@@ -44,6 +45,13 @@ export function getSecurityConfig() {
   return {
     mode: "enforce",
 
+    /**
+     * Fingerprint denylist behaviour (env VISITOR_BLOCK_MODE).
+     * monitor (default): UAE residential → flag only; others → 403.
+     * hard: always 403 for blacklisted visitorIds.
+     */
+    visitorBlockMode: getVisitorBlockMode(),
+
     providers: {
       ipinfo: true,
       fingerprint: true,
@@ -72,7 +80,7 @@ export function getSecurityConfig() {
       hostingProviderKeywords: HOSTING_PROVIDER_KEYWORDS
     },
 
-    version: "2.3.0"
+    version: "2.4.0"
   };
 }
 

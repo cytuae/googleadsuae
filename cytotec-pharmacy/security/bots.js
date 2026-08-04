@@ -1,11 +1,13 @@
 /**
  * Trusted crawler / verifier detection
  * ------------------------------------
- * trusted_bot_bypass is strict:
- *   ASN AS15169 + company Google LLC + Googlebot/AdsBot UA
- * Empty IPinfo / hosting traffic never receives trusted_bot_bypass.
+ * trusted Google bypass (IPinfo path):
+ *   Googlebot/AdsBot UA + ASN AS15169 + company Google LLC
+ * Hosting flag does NOT disqualify Google AS15169 (crawlers are datacenter).
+ * Other hosting providers never receive this bypass.
  *
- * Broader Google crawler verification (IP ranges / DNS) lives in google-verify.js.
+ * Broader Google crawler verification (IP ranges / DNS) lives in google-verify.js
+ * and runs in middleware before blocked_hosting.
  */
 
 import { normalizeAsn } from "./blacklists";
@@ -27,8 +29,8 @@ export function isGoogleAdsOrSearchBot(request) {
 }
 
 /**
- * Strict trusted_bot_bypass — requires verified IPinfo signals.
- * Never grants bypass for empty ASN/company or hosting-classified IPs.
+ * Verified Google crawler via IPinfo signals (before blocked_hosting).
+ * Requires Google UA + AS15169 + Google LLC. Empty ASN/company → no bypass.
  *
  * @param {Request} request
  * @param {{ ok?: boolean, info?: { asn?: string|null, company?: string|null, is_hosting?: boolean|null }|null }|null|undefined} [ipResult]
@@ -47,9 +49,7 @@ export function isTrustedSecurityBypassBot(request, ipResult) {
   // Empty IPinfo data → no bypass
   if (!asn || !company) return false;
 
-  // Hosting-classified traffic → no bypass (Google crawlers use AS15169 path / verify)
-  if (info.is_hosting === true) return false;
-
+  // Google crawlers only — never grant to other hosting ASNs
   if (normalizeAsn(asn) !== "15169") return false;
   if (!/google\s*llc/i.test(String(company))) return false;
 

@@ -9,9 +9,17 @@
     waDefaultText: "مرحبا دكتورة عهود، ارغب بالحصول على سايتوتيك"
   };
 
+  /** Digits-only international number (no + / spaces). */
+  function normalizeWhatsAppDigits(raw) {
+    return String(raw || "").replace(/\D/g, "");
+  }
+
+  SITE.whatsapp = normalizeWhatsAppDigits(SITE.whatsapp) || "971547952044";
+
   function waUrl(text) {
-    var msg = encodeURIComponent(text || SITE.waDefaultText);
-    return "https://wa.me/" + SITE.whatsapp + "?text=" + msg;
+    var phone = normalizeWhatsAppDigits(SITE.whatsapp) || "971547952044";
+    var msg = encodeURIComponent(text || SITE.waDefaultText || "");
+    return "https://wa.me/" + phone + "?text=" + msg;
   }
 
   function newEventId() {
@@ -178,45 +186,34 @@
     }
   }
 
-  function isFingerprintReady() {
-    return document.documentElement.classList.contains("fp-security-ready");
-  }
-
   // Wire all WhatsApp CTAs — same message everywhere; one listener each.
-  // Clicks are blocked until fingerprint security marks html.fp-security-ready.
+  // Tracking never blocks navigation. href is always a valid wa.me link.
   document.querySelectorAll("[data-cta='whatsapp']").forEach(function (el) {
     if (el.getAttribute("data-wa-tracked") === "1") return;
     el.setAttribute("data-wa-tracked", "1");
     el.removeAttribute("data-wa-text");
-    el.setAttribute("href", waUrl(SITE.waDefaultText));
+    var href = waUrl(SITE.waDefaultText);
+    el.setAttribute("href", href);
     el.setAttribute("target", "_blank");
     el.setAttribute("rel", "noopener noreferrer");
     el.addEventListener("click", function (event) {
-      if (!isFingerprintReady()) {
-        event.preventDefault();
-        event.stopPropagation();
+      // Refresh href in case SITE_CONFIG loaded late; never block open.
+      var openHref = waUrl(SITE.waDefaultText);
+      el.setAttribute("href", openHref);
+      try {
+        trackWhatsAppClick(el.getAttribute("data-cta-source") || "whatsapp");
+      } catch (e) {}
+      // Only preventDefault when we immediately open the same link ourselves
+      // (fallback if browser would otherwise keep a stale # href).
+      if (!openHref || openHref.indexOf("https://wa.me/") !== 0) {
         return;
       }
-      trackWhatsAppClick(el.getAttribute("data-cta-source") || "whatsapp");
+      if ((el.getAttribute("href") || "") === "#" || !el.getAttribute("href")) {
+        event.preventDefault();
+        window.open(openHref, "_blank", "noopener,noreferrer");
+      }
     });
   });
-
-  // Extra contact links (tel/mailto/wa.me) — same fingerprint gate
-  document
-    .querySelectorAll(
-      "a[href*='wa.me'], a[href*='api.whatsapp.com'], a[href^='tel:'], a[href^='mailto:']"
-    )
-    .forEach(function (el) {
-      if (el.getAttribute("data-cta") === "whatsapp") return;
-      if (el.getAttribute("data-contact-gated") === "1") return;
-      el.setAttribute("data-contact-gated", "1");
-      el.addEventListener("click", function (event) {
-        if (!isFingerprintReady()) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      });
-    });
 
   // Footer dynamic bits
   var yearEl = document.getElementById("year");

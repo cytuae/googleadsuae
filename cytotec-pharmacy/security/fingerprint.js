@@ -17,8 +17,15 @@ export const FINGERPRINT_COOKIE = "device_fingerprint";
 export const SECURITY_BLOCKED_COOKIE = "security_blocked";
 
 /**
+ * Cookie / blacklist signal only — does not decide monitor vs hard (needs IPinfo).
+ *
  * @param {import('next/server').NextRequest} request
- * @returns {{ blocked: boolean, reason: string|null, visitorId: string|null }}
+ * @returns {{
+ *   suspicious: boolean,
+ *   blocked: boolean,
+ *   reason: string|null,
+ *   visitorId: string|null
+ * }}
  */
 export function evaluateFingerprintCookies(request) {
   try {
@@ -29,6 +36,7 @@ export function evaluateFingerprintCookies(request) {
 
     if (securityBlocked === "1") {
       return {
+        suspicious: true,
         blocked: true,
         reason: "blocked_visitor_id",
         visitorId
@@ -37,16 +45,22 @@ export function evaluateFingerprintCookies(request) {
 
     if (visitorId && isFingerprintBlacklisted(visitorId)) {
       return {
+        suspicious: true,
         blocked: true,
         reason: "blocked_visitor_id",
         visitorId
       };
     }
 
-    return { blocked: false, reason: null, visitorId };
+    return { suspicious: false, blocked: false, reason: null, visitorId };
   } catch {
     // Fail-open: never break the gate on cookie/parse errors
-    return { blocked: false, reason: null, visitorId: null };
+    return {
+      suspicious: false,
+      blocked: false,
+      reason: null,
+      visitorId: null
+    };
   }
 }
 

@@ -7,7 +7,9 @@
     "predev": "npm run feed",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --experimental-default-type=module --test security/__tests__/visitor-block.test.mjs",
+    "lint": "node -e \"console.log('lint:ok')\""
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^5.2.0",

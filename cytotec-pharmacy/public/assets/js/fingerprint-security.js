@@ -146,10 +146,11 @@
       .then(function (res) {
         markSent();
         if (res && res.status === 403) {
-          // Keep WA locked; hard-navigate to 403 page
+          // Hard block only — keep WA locked; navigate to deny page
           window.location.replace("/access-denied");
           return;
         }
+        // 200 (incl. flagged monitor-only) → unlock WhatsApp
         unlockWhatsApp();
       })
       .catch(function () {

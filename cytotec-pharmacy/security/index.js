@@ -5,6 +5,13 @@ export {
   HOSTING_PROVIDER_KEYWORDS
 } from "./config";
 export {
+  getVisitorBlockMode,
+  isUaeResidential,
+  resolveSuspiciousVisitorDecision,
+  normalizeWhatsAppDigits,
+  buildWhatsAppUrl
+} from "./visitor-block";
+export {
   BLOCKED_IPS,
   BLOCKED_IP_SET,
   isBlockedIP,
