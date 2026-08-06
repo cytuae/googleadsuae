@@ -1,11 +1,10 @@
 /**
- * Visitor fingerprint block mode
+ * Visitor fingerprint monitoring
  * ------------------------------
- * VISITOR_BLOCK_MODE=monitor (default) | hard
+ * Blacklisted visitorIds are NEVER hard-blocked (no HTTP 403).
+ * Always monitor-only → monitored_suspicious_visitor.
  *
- * monitor: blacklisted visitorIds on UAE residential IPs are flagged
- *          and allowed (page + WhatsApp). Hard 403 elsewhere.
- * hard:    blacklisted visitorIds always get HTTP 403.
+ * VISITOR_BLOCK_MODE env is ignored for enforcement (legacy; kept for logs).
  */
 
 /** @typedef {'monitor' | 'hard'} VisitorBlockMode */
@@ -23,6 +22,7 @@ function asCountryCode(value) {
 }
 
 /**
+ * Legacy env reader — enforcement always monitor-only now.
  * @returns {VisitorBlockMode}
  */
 export function getVisitorBlockMode() {
@@ -33,25 +33,24 @@ export function getVisitorBlockMode() {
 }
 
 /**
- * UAE residential = AE country and not VPN/proxy/TOR/relay/hosting.
- *
- * @param {{ country?: string|null, is_vpn?: boolean|null, is_proxy?: boolean|null, is_tor?: boolean|null, is_relay?: boolean|null, is_hosting?: boolean|null }|null|undefined} info
+ * UAE visitor (any network type) — country AE.
+ * @param {{ country?: string|null }|null|undefined} info
  * @returns {boolean}
  */
-export function isUaeResidential(info) {
+export function isUaeCountry(info) {
   if (!info || typeof info !== "object") return false;
-  const country = asCountryCode(info.country);
-  if (country !== "AE") return false;
-  if (info.is_vpn === true) return false;
-  if (info.is_proxy === true) return false;
-  if (info.is_tor === true) return false;
-  if (info.is_relay === true) return false;
-  if (info.is_hosting === true) return false;
-  return true;
+  return asCountryCode(info.country) === "AE";
 }
 
 /**
- * Decide hard-block vs monitor-only for a blacklisted / security_blocked visitor.
+ * @deprecated Prefer isUaeCountry — AE is always allowed even on VPN/hosting.
+ */
+export function isUaeResidential(info) {
+  return isUaeCountry(info);
+}
+
+/**
+ * Suspicious visitorId decision — always monitor-only (never hard 403).
  *
  * @param {{
  *   mode?: VisitorBlockMode,
@@ -67,40 +66,20 @@ export function isUaeResidential(info) {
  * }}
  */
 export function resolveSuspiciousVisitorDecision(opts = {}) {
-  const mode = opts.mode || getVisitorBlockMode();
   const visitorId =
     typeof opts.visitorId === "string" && opts.visitorId.trim()
       ? opts.visitorId.trim()
       : null;
-  const ipInfo = opts.ipInfo || null;
 
-  if (mode === "hard") {
-    return {
-      hardBlock: true,
-      monitorOnly: false,
-      reason: "blocked_visitor_id",
-      flagged: false,
-      visitorId
-    };
-  }
+  // Fingerprints are monitor-only worldwide — never HTTP 403 for visitorId.
+  void opts.mode;
+  void opts.ipInfo;
 
-  // monitor mode — UAE residential: allow + flag
-  if (isUaeResidential(ipInfo)) {
-    return {
-      hardBlock: false,
-      monitorOnly: true,
-      reason: "monitored_suspicious_visitor",
-      flagged: true,
-      visitorId
-    };
-  }
-
-  // monitor mode but not UAE residential → keep hard 403
   return {
-    hardBlock: true,
-    monitorOnly: false,
-    reason: "blocked_visitor_id",
-    flagged: false,
+    hardBlock: false,
+    monitorOnly: true,
+    reason: "monitored_suspicious_visitor",
+    flagged: true,
     visitorId
   };
 }

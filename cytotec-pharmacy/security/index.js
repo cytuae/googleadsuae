@@ -6,11 +6,13 @@ export {
 } from "./config";
 export {
   getVisitorBlockMode,
+  isUaeCountry,
   isUaeResidential,
   resolveSuspiciousVisitorDecision,
   normalizeWhatsAppDigits,
   buildWhatsAppUrl
 } from "./visitor-block";
+export { isGoogleNetworkOrg } from "./bots";
 export {
   BLOCKED_IPS,
   BLOCKED_IP_SET,
@@ -35,6 +37,11 @@ export {
   isFingerprintBlacklisted
 } from "./fingerprint";
 export { applyRules, normalizeCountryCode, matchHostingProvider } from "./rules";
+export {
+  decideCountryAccess,
+  isSecurityProbePath,
+  asCountryCode
+} from "./access-decision";
 export { logVisit } from "./logger";
 export { createForbiddenResponse, forbiddenPageHtml } from "./responses";
 export {

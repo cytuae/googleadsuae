@@ -4,10 +4,8 @@
  * Runs once per page session (sessionStorage guard).
  * Uses @fingerprintjs/fingerprintjs (vendored UMD) to generate visitorId,
  * then POSTs device + Ads identifiers to /api/security/fingerprint.
- * On 403 → redirect to /access-denied. Errors never break the page.
- *
- * WhatsApp CTAs stay non-interactive until fingerprint check completes
- * (html.fp-security-ready), so blocked visitors cannot click during the check.
+ * Fingerprints are monitor-only — never hard-block or navigate away.
+ * WhatsApp stays unlocked (monitor-only; fails open).
  *
  * Reuses window.AdsIdentity for gclid/gbraid/wbraid + visitorId persistence.
  */
@@ -48,17 +46,16 @@
     }
   } catch (e) {}
 
-  // Gate WhatsApp until fingerprint finishes (or prior session already cleared)
+  // WhatsApp stays available — fingerprint is monitor-only (never blocks).
+  unlockWhatsApp();
+
   try {
     if (window.sessionStorage && sessionStorage.getItem(SESSION_KEY) === "1") {
-      unlockWhatsApp();
       return;
     }
   } catch (e) {
     // ignore storage errors
   }
-
-  lockWhatsApp();
 
   function queryParam(name) {
     try {
@@ -143,14 +140,9 @@
       body: JSON.stringify(payload),
       keepalive: true
     })
-      .then(function (res) {
+      .then(function () {
         markSent();
-        if (res && res.status === 403) {
-          // Hard block only — keep WA locked; navigate to deny page
-          window.location.replace("/access-denied");
-          return;
-        }
-        // 200 (incl. flagged monitor-only) → unlock WhatsApp
+        // Never 403 for fingerprints — always unlock WhatsApp
         unlockWhatsApp();
       })
       .catch(function () {

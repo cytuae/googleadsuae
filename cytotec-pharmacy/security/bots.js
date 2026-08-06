@@ -1,13 +1,12 @@
 /**
  * Trusted crawler / verifier detection
  * ------------------------------------
- * trusted Google bypass (IPinfo path):
- *   Googlebot/AdsBot UA + ASN AS15169 + company Google LLC
- * Hosting flag does NOT disqualify Google AS15169 (crawlers are datacenter).
- * Other hosting providers never receive this bypass.
+ * Google crawler UA + (AS15169 OR company Google LLC) → allow.
+ * Hosting flag does NOT disqualify Google AS15169.
+ * Spoofed Google UA alone is NOT enough when IPinfo is available.
  *
  * Broader Google crawler verification (IP ranges / DNS) lives in google-verify.js
- * and runs in middleware before blocked_hosting.
+ * and runs in middleware before blocked_hosting / country rules.
  */
 
 import { normalizeAsn } from "./blacklists";
@@ -16,9 +15,9 @@ import {
   verifyGoogleCrawlerRequest
 } from "./google-verify";
 
-/** UA must be Googlebot or AdsBot (desktop/mobile). */
+/** Google crawler User-Agents (candidates — still need network proof). */
 const TRUSTED_GOOGLE_UA =
-  /(?:AdsBot-Google-Mobile|AdsBot-Google|Googlebot)/i;
+  /(?:AdsBot-Google-Mobile|AdsBot-Google|Googlebot|Google-InspectionTool|Storebot-Google|Mediapartners-Google|Google-Safety)/i;
 
 /**
  * @param {Request} request
@@ -29,31 +28,35 @@ export function isGoogleAdsOrSearchBot(request) {
 }
 
 /**
- * Verified Google crawler via IPinfo signals (before blocked_hosting).
- * Requires Google UA + AS15169 + Google LLC. Empty ASN/company → no bypass.
+ * @param {string|null|undefined} asn
+ * @param {string|null|undefined} company
+ * @returns {boolean}
+ */
+export function isGoogleNetworkOrg(asn, company) {
+  if (normalizeAsn(asn) === "15169") return true;
+  if (company && /google\s*llc/i.test(String(company))) return true;
+  return false;
+}
+
+/**
+ * Verified Google crawler via IPinfo (before blocked_hosting / geo).
+ * Requires Google crawler UA + (AS15169 OR Google LLC).
  *
  * @param {Request} request
- * @param {{ ok?: boolean, info?: { asn?: string|null, company?: string|null, is_hosting?: boolean|null }|null }|null|undefined} [ipResult]
+ * @param {{ ok?: boolean, info?: { asn?: string|null, company?: string|null }|null }|null|undefined} [ipResult]
  * @returns {boolean}
  */
 export function isTrustedSecurityBypassBot(request, ipResult) {
   const ua = request.headers.get("user-agent") || "";
   if (!ua || !TRUSTED_GOOGLE_UA.test(ua)) return false;
 
+  // Spoofed UA alone is not enough when network enrichment exists
   if (!ipResult || ipResult.ok !== true || !ipResult.info) return false;
 
   const info = ipResult.info;
-  const asn = info.asn;
-  const company = info.company;
+  if (!info.asn && !info.company) return false;
 
-  // Empty IPinfo data → no bypass
-  if (!asn || !company) return false;
-
-  // Google crawlers only — never grant to other hosting ASNs
-  if (normalizeAsn(asn) !== "15169") return false;
-  if (!/google\s*llc/i.test(String(company))) return false;
-
-  return true;
+  return isGoogleNetworkOrg(info.asn, info.company);
 }
 
 export { verifyGoogleCrawlerRequest, isAllowedGoogleCrawlerUserAgent };

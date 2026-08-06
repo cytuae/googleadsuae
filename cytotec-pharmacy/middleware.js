@@ -1,31 +1,23 @@
 /**
- * Edge security middleware — Security Layer v2 + Device Fingerprint v1
+ * Edge security middleware — Security Layer v2.5
  * -------------------------------------------------------------------
  * Check order:
- *   0. Bypass fingerprint API + /access-denied (no redirect loops)
+ *   0. Bypass security APIs + /access-denied
  *   1. Probe paths (.env / .git / wp-admin / xmlrpc) → 403
  *   2. Verified Google crawlers (IP ranges / reverse+forward DNS)
- *   3. Blocked IP ranges (e.g. 45.45.237.0/24) → 403 blocked_ip_range
- *   4. IPinfo lookup
- *   5. Verified Google via AS15169 + Google LLC + Googlebot/AdsBot UA
- *      (before blocked_hosting) → allowed_verified_google_crawler
- *   6. Suspicious visitorId / security_blocked cookie:
- *        VISITOR_BLOCK_MODE=monitor + UAE residential → allow + flag
- *        else → 403 blocked_visitor_id
- *   7. Remaining IP / provider / ASN / geo / hosting rules
- *
- * Verified Google bots receive the same landing HTML as normal users
- * (no cloaking). Spoofed Google UAs do not bypass hosting/JO blocks.
+ *   3. IPinfo lookup (extract country)
+ *   4. Google crawler UA + AS15169 / Google LLC → allow
+ *   5. country === AE → allow immediately (page + WhatsApp)
+ *   6. Fingerprint denylist → monitor-only (never 403)
+ *   7. Remaining geo / hosting / VPN rules (non-AE)
  *
  * Fail-open on errors. Never 500. Never expose secrets.
- *
- * Excludes: /_next/*, assets, images, css, js, fonts, favicon, robots, sitemap
  */
 
 import { NextResponse } from "next/server";
 import { getSecurityConfig, isEnforcementEnabled } from "./security/config";
 import { checkIP, extractClientIP } from "./security/ipinfo";
-import { applyRules } from "./security/rules";
+import { applyRules, normalizeCountryCode } from "./security/rules";
 import { logVisit } from "./security/logger";
 import { createForbiddenResponse } from "./security/responses";
 import {
@@ -33,7 +25,6 @@ import {
   verifyGoogleCrawlerRequest
 } from "./security/bots";
 import { evaluateFingerprintCookies } from "./security/fingerprint";
-import { isBlockedIPRange } from "./security/blocklist";
 import { resolveSuspiciousVisitorDecision } from "./security/visitor-block";
 
 export const config = {
@@ -45,7 +36,6 @@ export const config = {
 };
 
 /**
- * Paths that skip the public security gate (auth handled elsewhere).
  * @param {import('next/server').NextRequest} request
  * @returns {boolean}
  */
@@ -68,7 +58,7 @@ function isSecurityBypassPath(request) {
 }
 
 /**
- * Hard-block common credential / CMS probes.
+ * Hard-block common credential / CMS probes only.
  * @param {string} pathname
  * @returns {boolean}
  */
@@ -106,7 +96,7 @@ function serveLanding(request, meta = {}) {
   const url = request.nextUrl.clone();
   /** @type {Record<string, string>} */
   const headers = {
-    "x-security-engine": meta.engineVersion || "2.4.0",
+    "x-security-engine": meta.engineVersion || "2.5.0",
     "x-security-decision": "allow"
   };
   if (meta.requestId) headers["x-request-id"] = meta.requestId;
@@ -124,15 +114,14 @@ function serveLanding(request, meta = {}) {
     }
   }
 
-  if (meta.clearSecurityBlocked) {
-    res.cookies.set("security_blocked", "", {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 0
-    });
-  }
+  // Always clear legacy hard-block fingerprint cookie
+  res.cookies.set("security_blocked", "", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0
+  });
 
   return res;
 }
@@ -166,7 +155,7 @@ export async function middleware(request) {
     const clientIp = extractClientIP(request);
     const pathname = request.nextUrl.pathname || "";
 
-    // Probe / credential scans — always hard 403
+    // 1) Probe / credential scans — always hard 403
     if (isSecurityProbePath(pathname) && isEnforcementEnabled(securityConfig)) {
       try {
         await logVisit(
@@ -200,7 +189,7 @@ export async function middleware(request) {
       });
     }
 
-    // Verified Google crawlers — before Hosting/VPN/Proxy/geo/IP-range blocks.
+    // 2) Verified Google crawlers (IP ranges / DNS) — before hosting/geo
     const googleVerify = await verifyGoogleCrawlerRequest(request, clientIp);
     if (googleVerify.verified) {
       try {
@@ -234,46 +223,6 @@ export async function middleware(request) {
       });
     }
 
-    // Blocked IP ranges (e.g. 45.45.237.0/24) — 403 before page HTML
-    if (
-      isEnforcementEnabled(securityConfig) &&
-      clientIp &&
-      clientIp !== "unknown" &&
-      isBlockedIPRange(clientIp)
-    ) {
-      try {
-        await logVisit(
-          {
-            timestamp: new Date().toISOString(),
-            method: request.method,
-            path: pathname,
-            ip: clientIp,
-            requestId,
-            rulesResult: {
-              decision: "block",
-              allow: false,
-              matchedRules: ["blocked_ip_range"],
-              reason: "blocked_ip_range",
-              country: null,
-              blockType: "ip",
-              matchedProvider: null
-            }
-          },
-          { config: securityConfig }
-        );
-      } catch {
-        // ignore
-      }
-
-      return createForbiddenResponse({
-        requestId,
-        engineVersion: securityConfig.version,
-        blockType: "ip",
-        country: null,
-        reason: "blocked_ip_range"
-      });
-    }
-
     if (securityConfig.mode === "off" || !securityConfig.providers.rules) {
       return serveLanding(request, {
         requestId,
@@ -282,9 +231,13 @@ export async function middleware(request) {
       });
     }
 
+    // 3) Extract country via IPinfo
     const ipResult = await checkIP(request, { config: securityConfig });
+    const country = normalizeCountryCode(
+      ipResult.info && ipResult.info.country
+    );
 
-    // Google AdsBot/Googlebot + AS15169 + Google LLC — before blocked_hosting
+    // 4) Google crawler UA + AS15169 / Google LLC — before hosting/geo
     if (isTrustedSecurityBypassBot(request, ipResult)) {
       try {
         await logVisit(
@@ -300,7 +253,7 @@ export async function middleware(request) {
               allow: true,
               matchedRules: ["allowed_verified_google_crawler"],
               reason: "allowed_verified_google_crawler",
-              country: (ipResult.info && ipResult.info.country) || null,
+              country,
               blockType: null,
               matchedProvider: "AS15169"
             }
@@ -308,7 +261,7 @@ export async function middleware(request) {
           { config: securityConfig }
         );
       } catch {
-        // never fail the request for logging
+        // ignore
       }
       return serveLanding(request, {
         requestId,
@@ -317,71 +270,61 @@ export async function middleware(request) {
       });
     }
 
-    // Device Fingerprint — after IPinfo so UAE residential can be monitor-only
-    if (securityConfig.providers.fingerprint !== false) {
+    // 5) UAE always allowed — page + WhatsApp (ignore IP/ASN/VPN/hosting/fp)
+    if (country === "AE") {
       const fpGate = evaluateFingerprintCookies(request);
-      if (fpGate.suspicious && isEnforcementEnabled(securityConfig)) {
-        const adsIds = readAdsClickIds(request);
+      const adsIds = readAdsClickIds(request);
+      let reason = "allowed_uae";
+
+      if (fpGate.suspicious) {
         const decision = resolveSuspiciousVisitorDecision({
-          mode: securityConfig.visitorBlockMode,
-          ipInfo: ipResult.info || null,
-          visitorId: fpGate.visitorId
+          visitorId: fpGate.visitorId,
+          ipInfo: ipResult.info || null
         });
-
-        if (decision.monitorOnly) {
-          const timestamp = new Date().toISOString();
-          try {
-            await logVisit(
-              {
-                timestamp,
-                method: request.method,
-                path: pathname,
-                ip: ipResult.ip || clientIp,
-                requestId,
-                ipResult,
-                flagged: true,
-                visitorId: decision.visitorId,
-                gclid: adsIds.gclid,
-                gbraid: adsIds.gbraid,
-                wbraid: adsIds.wbraid,
-                rulesResult: {
-                  decision: "allow",
-                  allow: true,
-                  matchedRules: ["monitored_suspicious_visitor"],
-                  reason: "monitored_suspicious_visitor",
-                  country:
-                    (ipResult.info && ipResult.info.country) || "AE",
-                  blockType: "fingerprint",
-                  matchedProvider: decision.visitorId,
-                  flagged: true
-                }
-              },
-              { config: securityConfig }
-            );
-          } catch {
-            // ignore
-          }
-
-          console.info(
-            JSON.stringify({
-              flagged: true,
-              reason: "monitored_suspicious_visitor",
-              visitorId: decision.visitorId,
+        reason = decision.reason;
+        const timestamp = new Date().toISOString();
+        try {
+          await logVisit(
+            {
+              timestamp,
+              method: request.method,
+              path: pathname,
               ip: ipResult.ip || clientIp,
+              requestId,
+              ipResult,
+              flagged: true,
+              visitorId: decision.visitorId,
               gclid: adsIds.gclid,
               gbraid: adsIds.gbraid,
-              timestamp
-            })
+              wbraid: adsIds.wbraid,
+              rulesResult: {
+                decision: "allow",
+                allow: true,
+                matchedRules: ["allowed_uae", "monitored_suspicious_visitor"],
+                reason: "monitored_suspicious_visitor",
+                country: "AE",
+                blockType: null,
+                matchedProvider: decision.visitorId,
+                flagged: true
+              }
+            },
+            { config: securityConfig }
           );
-
-          return serveLanding(request, {
-            requestId,
-            reason: "monitored_suspicious_visitor",
-            engineVersion: securityConfig.version,
-            clearSecurityBlocked: true
-          });
+        } catch {
+          // ignore
         }
-
+        console.info(
+          JSON.stringify({
+            flagged: true,
+            reason: "monitored_suspicious_visitor",
+            visitorId: decision.visitorId,
+            ip: ipResult.ip || clientIp,
+            gclid: adsIds.gclid,
+            gbraid: adsIds.gbraid,
+            timestamp
+          })
+        );
+      } else {
         try {
           await logVisit(
             {
@@ -392,13 +335,12 @@ export async function middleware(request) {
               requestId,
               ipResult,
               rulesResult: {
-                decision: "block",
-                allow: false,
-                matchedRules: ["blocked_visitor_id"],
-                reason: "blocked_visitor_id",
-                country: (ipResult.info && ipResult.info.country) || null,
-                blockType: "fingerprint",
-                matchedProvider: fpGate.visitorId
+                decision: "allow",
+                allow: true,
+                matchedRules: ["allowed_uae"],
+                reason: "allowed_uae",
+                country: "AE",
+                blockType: null
               }
             },
             { config: securityConfig }
@@ -406,17 +348,72 @@ export async function middleware(request) {
         } catch {
           // ignore
         }
+      }
 
-        return createForbiddenResponse({
-          requestId,
-          engineVersion: securityConfig.version,
-          blockType: "fingerprint",
-          country: (ipResult.info && ipResult.info.country) || null,
-          reason: "blocked_visitor_id"
+      return serveLanding(request, {
+        requestId,
+        reason,
+        engineVersion: securityConfig.version,
+        clearSecurityBlocked: true
+      });
+    }
+
+    // 6) Fingerprint denylist — monitor-only worldwide (never 403)
+    if (securityConfig.providers.fingerprint !== false) {
+      const fpGate = evaluateFingerprintCookies(request);
+      if (fpGate.suspicious) {
+        const adsIds = readAdsClickIds(request);
+        const decision = resolveSuspiciousVisitorDecision({
+          visitorId: fpGate.visitorId,
+          ipInfo: ipResult.info || null
         });
+        const timestamp = new Date().toISOString();
+        try {
+          await logVisit(
+            {
+              timestamp,
+              method: request.method,
+              path: pathname,
+              ip: ipResult.ip || clientIp,
+              requestId,
+              ipResult,
+              flagged: true,
+              visitorId: decision.visitorId,
+              gclid: adsIds.gclid,
+              gbraid: adsIds.gbraid,
+              wbraid: adsIds.wbraid,
+              rulesResult: {
+                decision: "allow",
+                allow: true,
+                matchedRules: ["monitored_suspicious_visitor"],
+                reason: "monitored_suspicious_visitor",
+                country,
+                blockType: null,
+                matchedProvider: decision.visitorId,
+                flagged: true
+              }
+            },
+            { config: securityConfig }
+          );
+        } catch {
+          // ignore
+        }
+        console.info(
+          JSON.stringify({
+            flagged: true,
+            reason: "monitored_suspicious_visitor",
+            visitorId: decision.visitorId,
+            ip: ipResult.ip || clientIp,
+            gclid: adsIds.gclid,
+            gbraid: adsIds.gbraid,
+            timestamp
+          })
+        );
+        // Continue to geo/hosting rules — fingerprint alone never blocks
       }
     }
 
+    // 7) Remaining rules (blocked countries, hosting, VPN, …)
     const rulesResult = await applyRules({
       request,
       config: securityConfig,
@@ -460,7 +457,6 @@ export async function middleware(request) {
       engineVersion: securityConfig.version
     });
   } catch (error) {
-    // Fail-open: never return 500 / MIDDLEWARE_INVOCATION_FAILED
     console.error("[security:error]", {
       requestId,
       message: error && error.message ? error.message : String(error)
@@ -468,7 +464,7 @@ export async function middleware(request) {
     return serveLanding(request, {
       requestId,
       reason: "fail_open",
-      engineVersion: "2.4.0"
+      engineVersion: "2.5.0"
     });
   }
 }

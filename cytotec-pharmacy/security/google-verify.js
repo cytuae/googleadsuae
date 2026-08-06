@@ -5,12 +5,13 @@
  *  1) Official common-crawlers + special-crawlers CIDR lists, or
  *  2) Reverse DNS → hostname mask → forward DNS match
  *
- * Allowed User-Agents (candidates only):
- *  AdsBot-Google | AdsBot-Google-Mobile | Googlebot | Google-Safety
+ * Allowed User-Agents (candidates only — still need IP/DNS proof):
+ *  AdsBot-Google | AdsBot-Google-Mobile | Googlebot | Google-InspectionTool
+ *  Storebot-Google | Mediapartners-Google | Google-Safety
  */
 
 const ALLOWED_GOOGLE_UA =
-  /(?:AdsBot-Google-Mobile|AdsBot-Google|Googlebot|Google-Safety)/i;
+  /(?:AdsBot-Google-Mobile|AdsBot-Google|Googlebot|Google-InspectionTool|Storebot-Google|Mediapartners-Google|Google-Safety)/i;
 
 const COMMON_RANGES_URL =
   "https://developers.google.com/static/crawling/ipranges/common-crawlers.json";

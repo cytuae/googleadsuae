@@ -2,13 +2,8 @@
  * POST /api/security/fingerprint
  * ------------------------------
  * Receives FingerprintJS visitorId + device signals.
- * IP is taken only from trusted Vercel / proxy headers (never from the body).
- *
- * Blacklisted visitorIds:
- *   VISITOR_BLOCK_MODE=monitor + UAE residential → 200 flagged (WhatsApp OK)
- *   otherwise → 403 blocked_visitor_id
- *
- * Never exposes secrets. Never returns HTTP 500.
+ * Blacklisted visitorIds are monitor-only — always HTTP 200.
+ * Never returns 403 for fingerprint. Never HTTP 500.
  */
 
 import { NextResponse } from "next/server";
@@ -133,89 +128,28 @@ export async function POST(request) {
     const timestamp = new Date().toISOString();
     const screen = `${data.screenWidth}x${data.screenHeight}`;
 
-    // Permanent visitorId denylist — enrich with IPinfo for monitor mode
+    let ipInfo = null;
+    try {
+      const ipResult = await checkIP(request, { config: securityConfig });
+      ipInfo = ipResult.info || null;
+    } catch {
+      ipInfo = null;
+    }
+
     if (isFingerprintBlacklisted(data.visitorId)) {
-      let ipInfo = null;
-      try {
-        const ipResult = await checkIP(request, { config: securityConfig });
-        ipInfo = ipResult.info || null;
-      } catch {
-        ipInfo = null;
-      }
-
       const decision = resolveSuspiciousVisitorDecision({
-        mode: securityConfig.visitorBlockMode,
-        ipInfo,
-        visitorId: data.visitorId
+        visitorId: data.visitorId,
+        ipInfo
       });
-
-      if (decision.monitorOnly) {
-        const eventPayload = {
-          event: "DEVICE_FINGERPRINT",
-          timestamp,
-          visitorId: data.visitorId,
-          ip: ip === "unknown" ? null : ip,
-          blocked: false,
-          flagged: true,
-          reason: "monitored_suspicious_visitor",
-          userAgent: data.userAgent,
-          platform: data.platform,
-          language: data.language,
-          timezone: data.timezone,
-          screen,
-          devicePixelRatio: data.devicePixelRatio,
-          touchSupport: data.touchSupport,
-          hardwareConcurrency: data.hardwareConcurrency,
-          deviceMemory: data.deviceMemory,
-          pathname: data.pathname,
-          gclid: data.gclid,
-          gbraid: data.gbraid,
-          wbraid: data.wbraid,
-          browser: inferBrowser(data.userAgent),
-          device: inferDevice(data),
-          provider: ipInfo?.company || null,
-          company: ipInfo?.company || null,
-          asn: ipInfo?.asn || null,
-          country: ipInfo?.country || "AE"
-        };
-
-        console.info(JSON.stringify(eventPayload));
-
-        const syncMode = String(
-          process.env.SECURITY_EVENT_SYNC || "all"
-        ).toLowerCase();
-        if (syncMode !== "off") {
-          try {
-            await appendSecurityEvent(eventPayload);
-          } catch {
-            // ignore
-          }
-        }
-
-        const res = NextResponse.json(
-          {
-            ok: true,
-            blocked: false,
-            flagged: true,
-            reason: "monitored_suspicious_visitor",
-            whatsappAllowed: true
-          },
-          { status: 200 }
-        );
-        res.cookies.set("device_fingerprint", data.visitorId, COOKIE_BASE);
-        // Clear any prior hard-block cookie so UAE residents recover
-        res.cookies.set("security_blocked", "", { ...COOKIE_BASE, maxAge: 0 });
-        return res;
-      }
 
       const eventPayload = {
         event: "DEVICE_FINGERPRINT",
         timestamp,
         visitorId: data.visitorId,
         ip: ip === "unknown" ? null : ip,
-        blocked: true,
-        flagged: false,
-        reason: "blocked_visitor_id",
+        blocked: false,
+        flagged: true,
+        reason: decision.reason,
         userAgent: data.userAgent,
         platform: data.platform,
         language: data.language,
@@ -251,11 +185,17 @@ export async function POST(request) {
       }
 
       const res = NextResponse.json(
-        { ok: true, blocked: true, reason: "blocked_visitor_id" },
-        { status: 403 }
+        {
+          ok: true,
+          blocked: false,
+          flagged: true,
+          reason: "monitored_suspicious_visitor",
+          whatsappAllowed: true
+        },
+        { status: 200 }
       );
-      res.cookies.set("security_blocked", "1", COOKIE_BASE);
       res.cookies.set("device_fingerprint", data.visitorId, COOKIE_BASE);
+      res.cookies.set("security_blocked", "", { ...COOKIE_BASE, maxAge: 0 });
       return res;
     }
 
@@ -284,7 +224,7 @@ export async function POST(request) {
       provider: null,
       company: null,
       asn: null,
-      country: null
+      country: ipInfo?.country || null
     };
 
     console.log(JSON.stringify(eventPayload));
@@ -299,12 +239,12 @@ export async function POST(request) {
       { status: 200 }
     );
     res.cookies.set("device_fingerprint", data.visitorId, COOKIE_BASE);
+    res.cookies.set("security_blocked", "", { ...COOKIE_BASE, maxAge: 0 });
     return res;
   } catch (error) {
     console.error("[fingerprint:api:error]", {
       message: error && error.message ? error.message : String(error)
     });
-    // Fail-safe: never HTTP 500
     return NextResponse.json(
       { ok: false, blocked: false, reason: "fail_open" },
       { status: 200 }

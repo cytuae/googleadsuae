@@ -1,6 +1,4 @@
 {
-  "_comment": "Permanent provider/company blacklist (Security Layer v2). Add provider or company name substrings to the \"providers\" array (case-insensitive). Edit this file and redeploy — middleware logic does not need changes.",
-  "providers": [
-    "iCloud Private Relay"
-  ]
+  "_comment": "Provider/company blacklist (non-AE traffic only). AE is always allowed before this list. Do not add Etisalat, Du, Cloudflare, or Apple Private Relay.",
+  "providers": []
 }

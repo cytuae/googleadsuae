@@ -1,13 +1,16 @@
 /**
- * Security configuration — Security Layer v2
- * ------------------------------------------
+ * Security configuration — Security Layer v2.5
+ * --------------------------------------------
  * Secrets stay in env (IPINFO_TOKEN on Vercel). Never log or return the token.
  *
- * Permanent blacklists (edit JSON, redeploy — no middleware changes):
+ * AE (UAE) is always allowed in middleware/rules — never blocked by IP/ASN/
+ * provider/VPN/hosting/fingerprint. Fingerprint denylist is monitor-only.
+ *
+ * Permanent lists (JSON):
  *   - security/ip-blacklist.json
  *   - security/provider-blacklist.json
  *   - security/asn-blacklist.json
- *   - security/fingerprint-blacklist.json  (FingerprintJS visitorId strings)
+ *   - security/fingerprint-blacklist.json  (monitor-only visitorIds)
  */
 
 import { BLOCKED_IPS } from "./blocklist";
@@ -17,6 +20,8 @@ import { getVisitorBlockMode } from "./visitor-block";
 
 /**
  * Datacenter / cloud ASN–company keywords (case-insensitive substring match).
+ * Do NOT include Etisalat, Du, Cloudflare, or Apple Private Relay — those
+ * must never block UAE visitors (AE is short-circuited before this list).
  */
 export const HOSTING_PROVIDER_KEYWORDS = [
   "Amazon",
@@ -31,11 +36,8 @@ export const HOSTING_PROVIDER_KEYWORDS = [
   "Vultr",
   "Alibaba",
   "Tencent",
-  "Cloudflare",
   "Fastly",
-  "Akamai",
-  "Private Relay",
-  "iCloud Private Relay"
+  "Akamai"
 ];
 
 /**
@@ -46,9 +48,8 @@ export function getSecurityConfig() {
     mode: "enforce",
 
     /**
-     * Fingerprint denylist behaviour (env VISITOR_BLOCK_MODE).
-     * monitor (default): UAE residential → flag only; others → 403.
-     * hard: always 403 for blacklisted visitorIds.
+     * Legacy env VISITOR_BLOCK_MODE — fingerprints are always monitor-only
+     * (never HTTP 403) regardless of this value.
      */
     visitorBlockMode: getVisitorBlockMode(),
 
@@ -65,10 +66,11 @@ export function getSecurityConfig() {
     },
 
     rules: {
-      // SA = Saudi Arabia — geo allow runs before VPN/hosting gates
+      // AE always allowed in middleware before other gates.
+      // Other GCC allowlist countries skip VPN/hosting false-positives.
       allowedCountries: ["AE", "MA", "SA", "OM", "KW"],
-      blockedCountries: ["JO", "EG", "SY", "YE", "SD", "PK"],
-      // Sourced from security/ip-blacklist.json — add future IPs there
+      // Explicit geo blocks
+      blockedCountries: ["JO", "EG", "SY", "TR"],
       blockedIps: [...BLOCKED_IPS],
       blockUnknownCountry: false,
       blockVpn: true,
@@ -80,7 +82,7 @@ export function getSecurityConfig() {
       hostingProviderKeywords: HOSTING_PROVIDER_KEYWORDS
     },
 
-    version: "2.4.0"
+    version: "2.5.0"
   };
 }
 

@@ -1,20 +1,15 @@
 /**
- * Security rules engine — Security Layer v2
- * -----------------------------------------
- * Order:
- * 1) Verified Google crawler flag (middleware verifies IP/DNS first)
- * 2) IP blacklist (ip-blacklist.json) → 403 (even if IPinfo fails)
- * 3) IPinfo failure → allow (fail-open, never 500)
- * 4) Provider/company blacklist (provider-blacklist.json) → 403
- * 5) ASN blacklist (asn-blacklist.json) → 403
- * 6) Geo blocklist / allowlist (AE, MA, SA, OM, KW)
- * 7) Strict gate: vpn | proxy | tor | relay | hosting (non-allowlisted)
- * 8) Hosting/datacenter ASN–company keywords → else country_not_allowed
- *
- * Future entries:
- *   IPs       → security/ip-blacklist.json
- *   Providers → security/provider-blacklist.json
- *   ASNs      → security/asn-blacklist.json
+ * Security rules engine — Security Layer v2.5
+ * -------------------------------------------
+ * Order (after middleware probe + Google crawler):
+ * 1) Verified Google crawler flag
+ * 2) UAE (AE) — always allow (IP/ASN/VPN/hosting/provider ignored)
+ * 3) IPinfo failure / unknown country → allow (fail-open)
+ * 4) Explicit blocked countries (JO, EG, SY, TR)
+ * 5) IP / provider / ASN blacklists (non-AE only)
+ * 6) Other allowlisted countries (MA, SA, OM, KW)
+ * 7) VPN / proxy / tor / relay / hosting (non-allowlisted)
+ * 8) Hosting provider keywords → else country_not_allowed
  */
 
 import { isBlockedIP, isBlockedIPRange } from "./blocklist";
@@ -23,6 +18,7 @@ import {
   isAsnBlacklisted,
   normalizeAsn
 } from "./blacklists";
+import { decideCountryAccess } from "./access-decision";
 
 /** GTHost ASN — dedicated block reason (IPinfo-verified ASN only). */
 const BLOCKED_ASN_GTHOST = "63023";
@@ -44,9 +40,7 @@ const COUNTRY_NAME_TO_CODE = {
   JORDAN: "JO",
   EGYPT: "EG",
   SYRIA: "SY",
-  YEMEN: "YE",
-  SUDAN: "SD",
-  PAKISTAN: "PK",
+  TURKEY: "TR",
   "UNITED ARAB EMIRATES": "AE",
   UAE: "AE",
   MOROCCO: "MA",
@@ -138,8 +132,7 @@ export async function applyRules(context) {
   const blockUnknownCountry = Boolean(rulesConfig.blockUnknownCountry);
 
   // -------------------------------------------------------------------------
-  // RULE: Verified Google crawler (set only after IP/DNS verification)
-  // Prefer middleware path: allowed_verified_google_crawler
+  // RULE: Verified Google crawler (set only after IP/DNS / ASN verification)
   // -------------------------------------------------------------------------
   if (context.isGoogleBot) {
     return {
@@ -154,8 +147,76 @@ export async function applyRules(context) {
   }
 
   // -------------------------------------------------------------------------
-  // RULE 1: IP blacklist (ip-blacklist.json) — runs even when IPinfo fails
-  // Add future IPs in security/ip-blacklist.json → "ips"
+  // UAE / unknown / blocked countries (AE always before IP/VPN/hosting)
+  // -------------------------------------------------------------------------
+  const geoEarly = decideCountryAccess({
+    country,
+    blockedCountries,
+    allowedCountries,
+    ipinfoOk: ipResult.ok !== false
+  });
+
+  if (geoEarly.reason === "allowed_uae") {
+    return {
+      decision: "allow",
+      allow: true,
+      matchedRules: ["allowed_uae"],
+      reason: "allowed_uae",
+      country: "AE",
+      blockType: null,
+      matchedProvider: null
+    };
+  }
+
+  if (geoEarly.reason === "ipinfo_fail_open") {
+    return {
+      decision: "allow",
+      allow: true,
+      matchedRules: ["ipinfo_fail_open"],
+      reason: "ipinfo_fail_open",
+      country,
+      blockType: null,
+      matchedProvider: null
+    };
+  }
+
+  if (geoEarly.reason === "unknown_country_fail_open") {
+    if (blockUnknownCountry) {
+      return {
+        decision: "block",
+        allow: false,
+        matchedRules: ["unknown_country"],
+        reason: "unknown_country",
+        country: null,
+        blockType: "country",
+        matchedProvider: null
+      };
+    }
+    return {
+      decision: "allow",
+      allow: true,
+      matchedRules: ["unknown_country_fail_open"],
+      reason: "unknown_country_fail_open",
+      country: null,
+      blockType: null,
+      matchedProvider: null
+    };
+  }
+
+  if (geoEarly.reason === "blocked_country") {
+    return {
+      decision: "block",
+      allow: false,
+      matchedRules: ["blocked_country"],
+      reason: "blocked_country",
+      country: geoEarly.country,
+      blockType: "country",
+      matchedProvider: null
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Non-AE: IP / provider / ASN blacklists
   // -------------------------------------------------------------------------
   const clientIp =
     (ipResult.ip && String(ipResult.ip)) ||
@@ -193,26 +254,7 @@ export async function applyRules(context) {
     };
   }
 
-  // -------------------------------------------------------------------------
-  // RULE: IPinfo failure → allow entire request (never 500 / never false-block)
-  // -------------------------------------------------------------------------
-  if (!ipResult.ok) {
-    return {
-      decision: "allow",
-      allow: true,
-      matchedRules: ["ipinfo_fail_open"],
-      reason: "ipinfo_fail_open",
-      country,
-      blockType: null,
-      matchedProvider: null
-    };
-  }
-
   if (info) {
-    // -----------------------------------------------------------------------
-    // RULE 2: Provider/company blacklist (provider-blacklist.json)
-    // Add future providers in security/provider-blacklist.json → "providers"
-    // -----------------------------------------------------------------------
     const providerHit = isProviderBlacklisted(
       info.privacy_service || info.provider || null,
       info.company || null,
@@ -231,11 +273,6 @@ export async function applyRules(context) {
       };
     }
 
-    // -----------------------------------------------------------------------
-    // RULE 3a: GTHost ASN AS63023 → blocked_asn_gthost
-    // Runs after Google crawler allow (middleware / isGoogleBot) and before
-    // generic ASN / hosting gates.
-    // -----------------------------------------------------------------------
     if (normalizeAsn(info.asn) === BLOCKED_ASN_GTHOST) {
       return {
         decision: "block",
@@ -248,10 +285,6 @@ export async function applyRules(context) {
       };
     }
 
-    // -----------------------------------------------------------------------
-    // RULE 3: ASN blacklist (asn-blacklist.json)
-    // Add future ASNs in security/asn-blacklist.json → "asns"
-    // -----------------------------------------------------------------------
     if (isAsnBlacklisted(info.asn)) {
       return {
         decision: "block",
@@ -266,50 +299,7 @@ export async function applyRules(context) {
   }
 
   // -------------------------------------------------------------------------
-  // Geo: explicit blocked countries
-  // -------------------------------------------------------------------------
-  if (country && blockedCountries.includes(country)) {
-    return {
-      decision: "block",
-      allow: false,
-      matchedRules: ["blocked_country"],
-      reason: "blocked_country",
-      country,
-      blockType: "country",
-      matchedProvider: null
-    };
-  }
-
-  // -------------------------------------------------------------------------
-  // Geo: unknown country → fail-open
-  // -------------------------------------------------------------------------
-  if (!country) {
-    if (blockUnknownCountry) {
-      return {
-        decision: "block",
-        allow: false,
-        matchedRules: ["unknown_country"],
-        reason: "unknown_country",
-        country: null,
-        blockType: "country",
-        matchedProvider: null
-      };
-    }
-
-    return {
-      decision: "allow",
-      allow: true,
-      matchedRules: ["unknown_country_fail_open"],
-      reason: "unknown_country_fail_open",
-      country: null,
-      blockType: null,
-      matchedProvider: null
-    };
-  }
-
-  // -------------------------------------------------------------------------
-  // Geo: allowlist (AE, MA, SA, OM, KW) — before VPN/hosting so Saudi &
-  // other allowed visitors are not blocked by privacy VPN / carrier false flags
+  // Other allowlisted countries (MA, SA, OM, KW) — before VPN/hosting
   // -------------------------------------------------------------------------
   if (allowedCountries.includes(country)) {
     return {

@@ -1,12 +1,10 @@
 /**
  * Device Fingerprint Security Layer v1
  * ------------------------------------
- * Cookie / blacklist helpers for Edge middleware.
- * Client-side FingerprintJS runs in public/assets/js/fingerprint-security.js
- * and POSTs to /api/security/fingerprint.
+ * Cookie / denylist helpers for Edge middleware (monitor-only).
+ * Blacklisted visitorIds never cause HTTP 403 — only logging.
  *
- * Add blocked visitorIds to: security/fingerprint-blacklist.json
- * (JSON array of exact FingerprintJS visitorId strings).
+ * Add monitored visitorIds to: security/fingerprint-blacklist.json
  */
 
 import { isFingerprintBlacklisted } from "./blacklists";
