@@ -99,6 +99,25 @@
     } catch (e2) {}
   }
 
+  /** Google Ads WhatsApp conversion — click only; dedupe rapid double-fires. */
+  var ADS_WA_CONVERSION_SEND_TO = "AW-17219982138/E77WCKvEh-cEELqnKNA";
+  var lastAdsWaConversionAt = 0;
+  var ADS_WA_CONVERSION_DEDUP_MS = 2000;
+
+  function fireGoogleAdsWhatsAppConversion() {
+    var now = Date.now();
+    if (now - lastAdsWaConversionAt < ADS_WA_CONVERSION_DEDUP_MS) return;
+    lastAdsWaConversionAt = now;
+    try {
+      if (typeof gtag !== "function") return;
+      gtag("event", "conversion", {
+        send_to: ADS_WA_CONVERSION_SEND_TO,
+        value: 1.0,
+        currency: "MAD"
+      });
+    } catch (e) {}
+  }
+
   /**
    * Central WhatsApp click tracker — one event per real click.
    * Does not await; must never delay opening WhatsApp.
@@ -135,6 +154,9 @@
     };
 
     sendWhatsAppBeacon(payload);
+
+    // Google Ads conversion — only on real WhatsApp click (not page load)
+    fireGoogleAdsWhatsAppConversion();
 
     try {
       if (typeof gtag === "function") {
@@ -214,6 +236,21 @@
       }
     });
   });
+
+  // Any other WhatsApp links (wa.me / api.whatsapp.com) not marked data-cta
+  document
+    .querySelectorAll("a[href*='wa.me'], a[href*='api.whatsapp.com']")
+    .forEach(function (el) {
+      if (el.getAttribute("data-wa-tracked") === "1") return;
+      el.setAttribute("data-wa-tracked", "1");
+      el.addEventListener("click", function () {
+        try {
+          trackWhatsAppClick(
+            el.getAttribute("data-cta-source") || "whatsapp_link"
+          );
+        } catch (e) {}
+      });
+    });
 
   // Footer dynamic bits
   var yearEl = document.getElementById("year");
