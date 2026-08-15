@@ -1,5 +1,5 @@
 /**
- * Landing lead form — name / phone / emirate → /api/leads → /thank-you
+ * Landing lead form — phone / emirate → /api/leads → /thank-you
  * Vanilla JS only (static HTML landing). No React hydration.
  */
 (function () {
@@ -30,22 +30,17 @@
   }
 
   function clearErrors() {
-    ["nom", "telephone", "emirate", "form"].forEach(function (f) {
+    ["telephone", "emirate", "form"].forEach(function (f) {
       setError(f, "");
     });
   }
 
   function validate() {
     clearErrors();
-    var nom = (form.nom.value || "").trim();
     var telephone = (form.telephone.value || "").trim();
     var emirate = (form.emirate.value || "").trim();
     var ok = true;
 
-    if (nom.length < 2) {
-      setError("nom", "يرجى إدخال الاسم.");
-      ok = false;
-    }
     if (telephone.replace(/\D/g, "").length < 8) {
       setError("telephone", "يرجى إدخال رقم هاتف صحيح.");
       ok = false;
@@ -65,7 +60,6 @@
     var btn = form.querySelector('button[type="submit"]');
     var ids = getAdsIds();
     var payload = {
-      nom: (form.nom.value || "").trim(),
       telephone: (form.telephone.value || "").trim(),
       emirate: (form.emirate.value || "").trim(),
       gclid: ids.gclid || null,

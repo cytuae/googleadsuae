@@ -1,7 +1,7 @@
 /**
  * POST /api/leads
  * ---------------
- * Landing-page lead form (name, phone, emirate).
+ * Landing-page lead form (phone, emirate).
  * Logs to Vercel Runtime Logs + optional security event store.
  * Never returns HTTP 500. Does not change page design.
  */
@@ -55,7 +55,6 @@ export async function POST(request) {
       );
     }
 
-    const nom = asTrimmedString(body?.nom ?? body?.name, 120);
     const telephoneRaw = asTrimmedString(
       body?.telephone ?? body?.phone,
       40
@@ -63,12 +62,6 @@ export async function POST(request) {
     const telephone = digitsOnly(telephoneRaw);
     const emirate = asTrimmedString(body?.emirate, 64);
 
-    if (nom.length < 2) {
-      return NextResponse.json(
-        { ok: false, error: "يرجى إدخال الاسم." },
-        { status: 400 }
-      );
-    }
     if (telephone.length < 8) {
       return NextResponse.json(
         { ok: false, error: "يرجى إدخال رقم هاتف صحيح." },
@@ -87,7 +80,6 @@ export async function POST(request) {
     const eventPayload = {
       event: "LEAD_FORM",
       timestamp,
-      nom,
       telephone,
       emirate,
       ip: ip === "unknown" ? null : ip,
