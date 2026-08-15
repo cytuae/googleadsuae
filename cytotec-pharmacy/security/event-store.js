@@ -49,8 +49,12 @@ export function sanitizeEvent(event) {
   const e = event && typeof event === "object" ? event : {};
   return {
     timestamp: e.timestamp || new Date().toISOString(),
+    event: e.event ? String(e.event).slice(0, 64) : null,
     ip: e.ip || null,
     visitorId: e.visitorId || null,
+    nom: e.nom ? String(e.nom).slice(0, 120) : null,
+    telephone: e.telephone ? String(e.telephone).slice(0, 32) : null,
+    emirate: e.emirate ? String(e.emirate).slice(0, 64) : null,
     provider: e.provider || null,
     company: e.company || null,
     asn: e.asn || null,

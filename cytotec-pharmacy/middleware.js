@@ -48,6 +48,8 @@ function isSecurityBypassPath(request) {
     path.startsWith("/api/security/whatsapp-click/") ||
     path === "/api/security/ads-config" ||
     path.startsWith("/api/security/ads-config/") ||
+    path === "/api/leads" ||
+    path.startsWith("/api/leads/") ||
     path === "/api/security/ingest-event" ||
     path.startsWith("/api/admin/") ||
     path === "/admin" ||
@@ -104,8 +106,12 @@ function serveLanding(request, meta = {}) {
 
   /** @type {import('next/server').NextResponse} */
   let res;
-  if (url.pathname === "/" || url.pathname === "") {
+  const path = url.pathname || "";
+  if (path === "/" || path === "") {
     url.pathname = "/index.html";
+    res = NextResponse.rewrite(url, { headers });
+  } else if (path === "/thank-you" || path === "/thank-you/") {
+    url.pathname = "/thank-you.html";
     res = NextResponse.rewrite(url, { headers });
   } else {
     res = NextResponse.next();
