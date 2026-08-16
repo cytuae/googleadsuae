@@ -2,8 +2,8 @@
  * POST /api/leads
  * ---------------
  * Landing-page lead form (phone, emirate).
- * Logs to Vercel Runtime Logs + optional security event store.
- * Never returns HTTP 500. Does not change page design.
+ * Validates → POSTs to Google Apps Script (Sheets) → only then returns ok.
+ * Also logs to Vercel Runtime Logs + optional security event store.
  */
 
 import { NextResponse } from "next/server";
@@ -22,6 +22,11 @@ const EMIRATES = new Set([
   "أم القيوين"
 ]);
 
+const DEFAULT_SHEETS_WEBAPP_URL =
+  "https://script.google.com/macros/s/AKfycbzzl3IbAnkuLq9SBOcjS5Utvqe6nqKKYO_jMpZq9dCQa1Qkfc0EzCSQXxgiCVkha66EvA/exec";
+
+const SHEETS_TIMEOUT_MS = 15000;
+
 /**
  * @param {unknown} value
  * @param {number} max
@@ -38,6 +43,83 @@ function asTrimmedString(value, max) {
  */
 function digitsOnly(phone) {
   return phone.replace(/\D/g, "");
+}
+
+/**
+ * @returns {string}
+ */
+function sheetsWebAppUrl() {
+  const fromEnv = asTrimmedString(process.env.GOOGLE_SHEETS_WEBAPP_URL, 500);
+  return fromEnv || DEFAULT_SHEETS_WEBAPP_URL;
+}
+
+/**
+ * POST lead to Google Apps Script Web App (writes Google Sheet).
+ * @param {{ phone: string, emirate: string }} lead
+ * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+ */
+async function postLeadToGoogleSheets(lead) {
+  const url = sheetsWebAppUrl();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SHEETS_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone: lead.phone,
+        emirate: lead.emirate,
+        source: "Google Ads"
+      }),
+      redirect: "follow",
+      signal: controller.signal
+    });
+
+    const text = await res.text().catch(() => "");
+    let parsed = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = null;
+    }
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: `sheets_http_${res.status}`
+      };
+    }
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      (parsed.ok === false ||
+        parsed.success === false ||
+        parsed.error ||
+        parsed.result === "error")
+    ) {
+      return {
+        ok: false,
+        error:
+          typeof parsed.error === "string"
+            ? parsed.error
+            : "sheets_response_error"
+      };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    const message =
+      error && error.name === "AbortError"
+        ? "sheets_timeout"
+        : error && error.message
+          ? error.message
+          : String(error);
+    return { ok: false, error: message };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -75,6 +157,27 @@ export async function POST(request) {
       );
     }
 
+    const sheetsResult = await postLeadToGoogleSheets({
+      phone: telephone,
+      emirate
+    });
+
+    if (!sheetsResult.ok) {
+      console.error(
+        JSON.stringify({
+          event: "LEAD_FORM_SHEETS_ERROR",
+          timestamp: new Date().toISOString(),
+          telephone,
+          emirate,
+          error: sheetsResult.error
+        })
+      );
+      return NextResponse.json(
+        { ok: false, error: "تعذّر الإرسال. حاولي مرة أخرى." },
+        { status: 200 }
+      );
+    }
+
     const ip = extractClientIP(request);
     const timestamp = new Date().toISOString();
     const eventPayload = {
@@ -97,7 +200,7 @@ export async function POST(request) {
     try {
       await appendSecurityEvent(eventPayload);
     } catch {
-      // ignore store failures — lead already logged
+      // ignore store failures — Sheet write already succeeded
     }
 
     return NextResponse.json({ ok: true }, { status: 200 });
