@@ -6,13 +6,20 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="robots" content="noindex, follow">
 
-  <!-- Google tag (gtag.js) -->
+  <!-- Google tag (gtag.js) — existing install only; Lead Form conversion on this page -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-VDB33PME30"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
     gtag('config', 'G-VDB33PME30');
+    // Google Ads: Lead Form - Thank You (once per page load)
+    if (!window.__leadThankYouConversionFired) {
+      window.__leadThankYouConversionFired = true;
+      gtag('event', 'conversion', {
+        'send_to': 'AW-17219982138/p120CPbhmOlcELqmkJNA'
+      });
+    }
   </script>
 
   <title>شكراً — تم استلام طلبك | د. عهود توفيق</title>
